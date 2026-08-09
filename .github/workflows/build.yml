@@ -1,0 +1,147 @@
+name: Build Installers
+
+# 两种触发：
+#   1) push 到 main（或打 v* tag）：仅上传 Actions Artifacts，方便调试，不对外发布。
+#   2) 在 GitHub 网页发布一个 Release（published）：自动构建 macOS(.dmg) + Windows(.msi)
+#      + Linux(.deb)，作为该 Release 的资产挂载，并额外生成 dist-manifest.json，
+#      供 WorkBuddy Skill 通过 /releases/latest 稳定拉到最新二进制。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch: {}        # 允许在 GitHub 网页手动点 "Run workflow" 触发
+
+permissions:
+  contents: write              # release 事件需要写权限来挂载资产
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+          - platform: windows-latest
+          - platform: ubuntu-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Install frontend deps
+        working-directory: pyrakb-app
+        run: npm install
+
+      # macOS 的 dmg 打包（bundle_dmg.sh / create-dmg）依赖 Finder/AppleScript，
+      # 在无界面 CI 上必失败。这里只出 .app，再用 hdiutil 手动压 dmg（headless 可用）。
+      - name: "Build Tauri (macOS: app only + manual dmg)"
+        if: matrix.platform == 'macos-latest'
+        working-directory: pyrakb-app
+        run: |
+          npm run tauri build -- --bundles app
+          hdiutil create -volname "PyraKB" \
+            -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
+            -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
+
+      - name: "Build Tauri (Windows: msi)"
+        if: matrix.platform == 'windows-latest'
+        working-directory: pyrakb-app
+        run: npm run tauri build -- --bundles msi
+
+      - name: "Build Tauri (Linux: deb)"
+        if: matrix.platform == 'ubuntu-latest'
+        working-directory: pyrakb-app
+        run: npm run tauri build -- --bundles deb
+
+      # 调试用：push / 手动触发时上传 Artifacts
+      - name: Upload artifacts (push only)
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyrakb-${{ matrix.platform }}
+          path: |
+            pyrakb-app/src-tauri/target/release/bundle/**/*.dmg
+            pyrakb-app/src-tauri/target/release/bundle/**/*.msi
+            pyrakb-app/src-tauri/target/release/bundle/**/*.deb
+            pyrakb-app/src-tauri/target/release/bundle/**/*.AppImage
+          if-no-files-found: error
+
+      # 发版用：把各平台包挂到当前 Release 资产
+      - name: Upload release assets (release only)
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        working-directory: pyrakb-app
+        shell: bash
+        run: |
+          files=$(find src-tauri/target/release/bundle \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
+          echo "Uploading: $files"
+          gh release upload "$TAG" $files --repo "$REPO"
+
+  # 发版时汇总一个 dist-manifest.json，让 Skill 免 API 直接拿到各平台资产名
+  publish-manifest:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate dist manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[].name' > /tmp/assets.txt
+          cat /tmp/assets.txt
+          python3 - <<'PY'
+          import json
+          tag = "${{ github.event.release.tag_name }}"
+          repo = "${{ github.repository }}"
+          assets = [l.strip() for l in open('/tmp/assets.txt') if l.strip()]
+          def pick(ext):
+              for a in assets:
+                  if a.lower().endswith(ext):
+                      return a
+              return None
+          manifest = {
+              "version": tag,
+              "repo": repo,
+              "baseUrl": f"https://github.com/{repo}/releases/download/{tag}",
+              "assets": {
+                  "macos": pick(".dmg"),
+                  "windows": pick(".msi"),
+                  "linux": pick(".deb") or pick(".AppImage"),
+              },
+          }
+          with open("dist-manifest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+          print(open("dist-manifest.json").read())
+          PY
+      - name: Upload manifest to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" dist-manifest.json --repo "$REPO"

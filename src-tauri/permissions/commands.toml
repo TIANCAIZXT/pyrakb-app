@@ -1,0 +1,19 @@
+[[set]]
+identifier = "default"
+description = "Default PyraKB command permissions"
+permissions = ["allow-load-vault", "allow-sync-vault", "allow-reveal-vault"]
+
+[[permission]]
+identifier = "allow-load-vault"
+description = "Allow the load_vault command (read vault from disk)"
+commands.allow = ["load_vault"]
+
+[[permission]]
+identifier = "allow-sync-vault"
+description = "Allow the sync_vault command (write vault to disk)"
+commands.allow = ["sync_vault"]
+
+[[permission]]
+identifier = "allow-reveal-vault"
+description = "Allow the reveal_vault command (open vault folder in Finder)"
+commands.allow = ["reveal_vault"]

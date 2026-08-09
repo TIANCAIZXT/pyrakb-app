@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.pnp/
+.yarn/
+
+# Rust build artifacts (built by CI / local, never committed)
+src-tauri/target/
+src-tauri/gen/
+
+# Tauri build output bundles
+dist/
+*.app
+*.dmg
+*.msi
+*.deb
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+*.local
