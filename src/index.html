@@ -417,7 +417,11 @@
 
 <script>
 /* ============ State & Storage ============ */
-const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
+const HAS_TAURI = !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+const invoke = (cmd, args) => HAS_TAURI ? window.__TAURI__.core.invoke(cmd, args) : Promise.resolve();
+const LS_KEY = 'pyrakb_v1';
+function lsLoad(){ try{ const raw=localStorage.getItem(LS_KEY); if(!raw) return null; return JSON.parse(raw); }catch(e){ return null; } }
+function lsSave(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ nodes:state.nodes, images:state.images, theme:state.theme })); }catch(e){ console.error('localStorage 写入失败（可能超出浏览器配额）', e); } }
 let state = { nodes: {}, selectedId: null, view: 'tree', theme: 'light', filterTag: null, lastDeleted: null, graphFilter: 'all', images: {}, mode: 'edit' };
 
 function uid(){ return 'n' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
@@ -454,21 +458,36 @@ function seed(){
   state.theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-function save(){ // 触发后台同步（fire-and-forget，落盘为真实文件）
-  const nodes = Object.values(state.nodes).map(n=>({ id:n.id, title:n.title, parentId:n.parentId, tags:n.tags||[], content:n.content||'' }));
-  invoke('sync_vault', { nodes, images: state.images, theme: state.theme }).catch(e=>console.error('sync_vault failed', e));
+function save(){ // 双模式：桌面走 Tauri 真实文件层；网页走浏览器本地存储
+  if(HAS_TAURI){
+    const nodes = Object.values(state.nodes).map(n=>({ id:n.id, title:n.title, parentId:n.parentId, tags:n.tags||[], content:n.content||'' }));
+    invoke('sync_vault', { nodes, images: state.images, theme: state.theme }).catch(e=>console.error('sync_vault failed', e));
+  } else {
+    lsSave();
+  }
 }
 async function apiLoad(){
-  try {
-    const d = await invoke('load_vault');
+  if(HAS_TAURI){
+    try {
+      const d = await invoke('load_vault');
+      if(d && d.nodes && Object.keys(d.nodes).length){
+        state.nodes = d.nodes;
+        state.images = d.images || {};
+        state.theme = d.theme || 'light';
+        return true;
+      }
+    } catch(e){ console.error('load_vault failed', e); }
+    return false;
+  } else {
+    const d = lsLoad();
     if(d && d.nodes && Object.keys(d.nodes).length){
       state.nodes = d.nodes;
       state.images = d.images || {};
       state.theme = d.theme || 'light';
       return true;
     }
-  } catch(e){ console.error('load_vault failed', e); }
-  return false;
+    return false;
+  }
 }
 
 /* ============ Helpers ============ */
@@ -1137,13 +1156,21 @@ document.getElementById('search-input').addEventListener('input',(e)=>{
 document.getElementById('view-seg').addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(b) setView(b.dataset.view); });
 document.getElementById('add-root').addEventListener('click',addRoot);
 document.getElementById('theme-btn').addEventListener('click',()=>{ state.theme = state.theme==='dark'?'light':'dark'; applyTheme(); save(); });
-document.getElementById('reveal-btn').addEventListener('click',()=>{ invoke('reveal_vault').catch(e=>console.error('reveal_vault failed', e)); });
+document.getElementById('reveal-btn').addEventListener('click',()=>{
+  if(HAS_TAURI){ invoke('reveal_vault').catch(e=>console.error('reveal_vault failed', e)); }
+  else { showToast('网页版数据已存于当前浏览器本地（localStorage）。桌面版可在访达打开文件夹。'); }
+});
 window.addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); document.getElementById('search-input').focus(); } });
 
 /* ============ Boot ============ */
 (async function(){
+  if(!HAS_TAURI){ // 网页版：隐藏「在访达打开」按钮并标注版本
+    const rb=document.getElementById('reveal-btn'); if(rb) rb.style.display='none';
+    const sub=document.querySelector('.brand .sub'); if(sub) sub.textContent='本地知识库 · 网页版';
+  }
   if(!(await apiLoad())){ seed(); save(); }
   applyTheme(); setView('tree'); render();
+  if(!HAS_TAURI){ showToast('网页版：笔记存于当前浏览器本地存储；换设备或清缓存会丢失，重要资料建议安装桌面版。'); }
 })();
 </script>
 </body>
