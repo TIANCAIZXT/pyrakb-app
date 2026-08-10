@@ -2,7 +2,9 @@
 # PyraKB 免 gh 一键发布脚本（用 GitHub REST API + git 内嵌令牌）
 # 适用于本机装不了 gh 的情况。用法：
 #   GH_TOKEN=ghp_xxx ./publish_token.sh
-# 令牌需 repo 权限；用完可 unset，勿外泄。
+# 令牌需 repo 权限；此外因本仓库含 .github/workflows/*.yml，
+# 推送工作流文件还需额外勾选 workflow 权限，否则 GitHub 会拒绝推送。
+# 用完可 unset，勿外泄。
 set -euo pipefail
 
 REPO_NAME="${REPO_NAME:-pyrakb-app}"
