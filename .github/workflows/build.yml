@@ -57,6 +57,7 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           npm run build -- --bundles app
+          mkdir -p src-tauri/target/release/bundle/dmg
           hdiutil create -volname "PyraKB" \
             -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
             -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
