@@ -5,6 +5,9 @@ name: Build Installers
 #   2) 在 GitHub 网页发布一个 Release（published）：自动构建 macOS(.dmg) + Windows(.msi)
 #      + Linux(.deb)，作为该 Release 的资产挂载，并额外生成 dist-manifest.json，
 #      供 WorkBuddy Skill 通过 /releases/latest 稳定拉到最新二进制。
+#
+# 注意：仓库根目录本身就是项目（package.json 在根），因此所有步骤都在仓库根运行，
+#       无需 working-directory。
 on:
   push:
     branches: [main]
@@ -46,29 +49,25 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
 
       - name: Install frontend deps
-        working-directory: pyrakb-app
         run: npm install
 
       # macOS 的 dmg 打包（bundle_dmg.sh / create-dmg）依赖 Finder/AppleScript，
       # 在无界面 CI 上必失败。这里只出 .app，再用 hdiutil 手动压 dmg（headless 可用）。
       - name: "Build Tauri (macOS: app only + manual dmg)"
         if: matrix.platform == 'macos-latest'
-        working-directory: pyrakb-app
         run: |
-          npm run tauri build -- --bundles app
+          npm run build -- --bundles app
           hdiutil create -volname "PyraKB" \
             -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
             -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
 
       - name: "Build Tauri (Windows: msi)"
         if: matrix.platform == 'windows-latest'
-        working-directory: pyrakb-app
-        run: npm run tauri build -- --bundles msi
+        run: npm run build -- --bundles msi
 
       - name: "Build Tauri (Linux: deb)"
         if: matrix.platform == 'ubuntu-latest'
-        working-directory: pyrakb-app
-        run: npm run tauri build -- --bundles deb
+        run: npm run build -- --bundles deb
 
       # 调试用：push / 手动触发时上传 Artifacts
       - name: Upload artifacts (push only)
@@ -77,10 +76,10 @@ jobs:
         with:
           name: pyrakb-${{ matrix.platform }}
           path: |
-            pyrakb-app/src-tauri/target/release/bundle/**/*.dmg
-            pyrakb-app/src-tauri/target/release/bundle/**/*.msi
-            pyrakb-app/src-tauri/target/release/bundle/**/*.deb
-            pyrakb-app/src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.AppImage
           if-no-files-found: error
 
       # 发版用：把各平台包挂到当前 Release 资产
@@ -90,13 +89,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
           REPO: ${{ github.repository }}
-        working-directory: pyrakb-app
         shell: bash
         run: |
           files=$(find src-tauri/target/release/bundle \
             \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
           echo "Uploading: $files"
           gh release upload "$TAG" $files --repo "$REPO"
+          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/PyraKB_0.1.0.dmg"
 
   # 发版时汇总一个 dist-manifest.json，让 Skill 免 API 直接拿到各平台资产名
   publish-manifest:
