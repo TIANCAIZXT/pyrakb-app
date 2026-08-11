@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PyraKB · 本地知识库（原型体验）</title>
+<title>Mini Wiki · 一个命令，一个文件夹，一个知识库（原型体验）</title>
 <style>
   :root {
     --bg: #FFFFFF;
@@ -100,6 +100,18 @@
   }
   .icon-btn:hover { background: var(--bg-soft); color: var(--text); }
 
+  .dl-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: var(--radius-btn);
+    font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap;
+    color: var(--accent); background: var(--accent-soft);
+    border: 1px solid var(--accent-border); transition: all .2s var(--ease);
+  }
+  .dl-badge:hover { background: var(--accent); color: #fff; }
+  .dl-badge .ico { font-size: 14px; }
+  .dl-badge .ver { font-variant-numeric: tabular-nums; }
+  .dl-badge.update { box-shadow: 0 0 0 3px var(--accent-border); }
+
   /* Body */
   #body { flex: 1; display: flex; min-height: 0; }
 
@@ -134,6 +146,9 @@
   .node-row .row-add { opacity: 0; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; color: var(--text-mute); font-size: 15px; }
   .node-row:hover .row-add { opacity: 1; }
   .node-row .row-add:hover { background: var(--accent-soft); color: var(--accent); }
+  .node-row.drop-into { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+  .node-row.drop-into .label { color: var(--accent); font-weight: 500; }
+  .node-row.dragging { opacity: .35; }
   .inline-input {
     flex: 1; border: 1px solid var(--accent); background: var(--bg-elevated);
     border-radius: 6px; padding: 3px 6px; font-size: 14px; outline: none; color: var(--text);
@@ -278,6 +293,22 @@
   .btn.primary:hover { filter: brightness(1.06); }
   .btn.danger { background: var(--danger); color: #fff; }
   .btn.danger:hover { filter: brightness(1.06); }
+  /* 导入预览 */
+  #import-preview { position: fixed; inset: 0; background: rgba(20,24,33,.55); z-index: 320; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
+  #import-preview.show { display: flex; }
+  .ip-card { width: min(560px, 94vw); max-height: 86vh; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px rgba(20,30,60,.32); display: flex; flex-direction: column; overflow: hidden; }
+  .ip-head { padding: 18px 20px 12px; border-bottom: 1px solid var(--border); }
+  .ip-title { font-size: 16px; font-weight: 700; }
+  .ip-sub { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+  .ip-body { padding: 14px 20px; overflow-y: auto; }
+  .ip-file { font-size: 12px; font-weight: 600; color: var(--accent); margin: 6px 0 4px; }
+  .ov-node { position: relative; padding: 5px 0 5px 18px; border-left: 1px solid var(--border-strong); margin-left: 2px; }
+  .ov-node:last-child { border-left-color: transparent; }
+  .ov-dot { position: absolute; left: -5px; top: 11px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg-elevated); }
+  .ov-title { font-size: 14px; font-weight: 600; }
+  .anc-badge { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--text-mute); background: var(--bg-soft); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+  .ov-snippet { font-size: 11px; color: var(--text-soft); margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
+  .ip-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
 
   /* Toast */
   #toast {
@@ -345,7 +376,8 @@
 <div id="app">
   <!-- Top bar -->
   <div id="topbar">
-    <div class="brand"><span class="logo">P</span> PyraKB <span class="sub">本地知识库 · 原型</span></div>
+    <div class="brand"><span class="logo">M</span> Mini Wiki <span class="sub">一个命令，一个文件夹，一个知识库</span></div>
+    <a id="dl-badge" class="dl-badge" target="_blank" rel="noopener noreferrer" href="https://github.com/TIANCAIZXT/pyrakb-app/releases/latest"><span class="ico">📦</span><span class="ver">安装包…</span></a>
     <div id="search">
       <span>🔍</span>
       <input id="search-input" placeholder="搜索笔记与标签…" />
@@ -408,6 +440,20 @@
 
 <!-- Modal -->
 <div id="overlay"><div class="modal" id="modal"></div></div>
+<!-- 导入预览（把 HTML/Word 自动识别为带层级的笔记树，确认后再落库） -->
+<div id="import-preview">
+  <div class="ip-card">
+    <div class="ip-head">
+      <div class="ip-title">导入预览 · 识别结果</div>
+      <div class="ip-sub">系统已自动识别标题层级与锚点，确认后将按此结构生成笔记</div>
+    </div>
+    <div class="ip-body" id="ip-body"></div>
+    <div class="ip-foot">
+      <button class="btn ghost" id="ip-cancel">取消</button>
+      <button class="btn primary" id="ip-confirm">确认导入</button>
+    </div>
+  </div>
+</div>
 
 <!-- [[ ]] 联想下拉 -->
 <div id="link-pop"></div>
@@ -573,7 +619,7 @@ function renderTree(){
   const root = document.getElementById('tree'); root.innerHTML='';
   const build=(pid, container)=>{
     childrenOf(pid).forEach(n=>{
-      const row=document.createElement('div'); row.className='node-row'; row.dataset.id=n.id;
+      const row=document.createElement('div'); row.className='node-row'; row.dataset.id=n.id; row.setAttribute('draggable','true');
       if(n.id===state.selectedId) row.classList.add('selected');
       const kids=childrenOf(n.id);
       const tw=document.createElement('span'); tw.className='twist'+(kids.length?'':' leaf'); tw.textContent='▾';
@@ -583,6 +629,11 @@ function renderTree(){
       row.addEventListener('click',(e)=>{ if(e.target===add) return; if(e.target===tw){ row.classList.toggle('collapsed'); const ch=row.nextElementSibling; if(ch&&ch.classList.contains('children')) ch.classList.toggle('hidden'); return; } selectNode(n.id); });
       add.addEventListener('click',(e)=>{ e.stopPropagation(); addChild(n.id); });
       row.addEventListener('contextmenu',(e)=>{ e.preventDefault(); openCtx(e, n.id); });
+      row.addEventListener('dragstart',(e)=>{ dragId=n.id; row.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; try{ e.dataTransfer.setData('text/plain', n.id); }catch(_){} });
+      row.addEventListener('dragend',()=>{ row.classList.remove('dragging'); clearDropHL(); dragId=null; });
+      row.addEventListener('dragover',(e)=>{ if(dragId===null || dragId===n.id || isDescendant(n.id, dragId)) return; e.preventDefault(); e.dataTransfer.dropEffect='move'; clearDropHL(); row.classList.add('drop-into'); });
+      row.addEventListener('dragleave',()=>{ row.classList.remove('drop-into'); });
+      row.addEventListener('drop',(e)=>{ e.preventDefault(); e.stopPropagation(); clearDropHL(); const tid=n.id; if(dragId!==null && dragId!==tid && !isDescendant(tid, dragId)){ moveNode(dragId, tid); } dragId=null; });
       container.appendChild(row);
       if(kids.length){ const ch=document.createElement('div'); ch.className='children'; build(n.id, ch); container.appendChild(ch); }
     });
@@ -814,13 +865,62 @@ async function insertImageFiles(files){
 function openImportPicker(){ const fi=document.getElementById('import-input'); if(fi) fi.click(); }
 function readFileAsText(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsText(file); }); }
 function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector('script[src="'+src+'"]')){ res(); return; } const s=document.createElement('script'); s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('解析库加载失败(需联网)：'+(src.split('/').pop()))); document.head.appendChild(s); }); }
-function htmlToMarkdown(html){
+// 把「单个元素自身」转成行内 Markdown（处理 img/strong/a 等；mdInline 只拼子节点，故需单独处理元素自身）
+function inlineEl(el, idMap){
+  const tag=el.tagName.toLowerCase();
+  const inner=mdInline(el, idMap);
+  if(/^h[1-6]$/.test(tag)) return '';                 // 标题是结构，内容抽取时忽略
+  if(tag==='strong'||tag==='b') return '**'+inner+'**';
+  if(tag==='em'||tag==='i') return '*'+inner+'*';
+  if(tag==='code') return '`'+inner+'`';
+  if(tag==='a'){
+    let href=(el.getAttribute('href')||'').trim();
+    if(href.charAt(0)==='#'){ const tgt=idMap && idMap[href.slice(1)]; if(tgt) return '[['+tgt+(inner.trim()?('|'+inner.trim()):'')+']]'; }
+    return '['+inner+']('+href+')';
+  }
+  if(tag==='img') return '!['+(el.getAttribute('alt')||'')+']('+(el.getAttribute('src')||'')+')';
+  if(tag==='br') return '\n';
+  return inner;
+}
+function mdInline(node, idMap){
+  let out='';
+  node.childNodes.forEach(ch=>{ if(ch.nodeType===3) out+=ch.textContent; else if(ch.nodeType===1) out+=inlineEl(ch, idMap); });
+  return out;
+}
+function mdTable(table, idMap){
+  const rows=Array.from(table.querySelectorAll('tr')); if(!rows.length) return '';
+  const cell=(tr)=>Array.from(tr.children).map(c=>mdInline(c,idMap).trim().replace(/\|/g,'\\|'));
+  let md='| '+cell(rows[0]).join(' | ')+' |\n| '+Array(rows[0].children.length).fill('---').join(' | ')+' |\n';
+  for(let i=1;i<rows.length;i++){ md+='| '+cell(rows[i]).join(' | ')+' |\n'; }
+  return md.trim();
+}
+function mdBlock(node, idMap){
+  if(node.nodeType===1){            // 叶子元素（未包在 p/figure 里，作块级兄弟）直接取其自身，避免图片/换行被吞
+    const t=node.tagName.toLowerCase();
+    if(t==='img') return inlineEl(node, idMap);
+    if(t==='br') return '\n';
+  }
+  let out='';
+  node.childNodes.forEach(ch=>{
+    if(ch.nodeType===3){ const t=ch.textContent.replace(/\s+/g,' '); if(t.trim()) out+=t; }
+    else if(ch.nodeType===1){
+      const tag=ch.tagName.toLowerCase();
+      if(/^h[1-6]$/.test(tag)){ out+='\n'+'#'.repeat(+tag[1])+' '+mdInline(ch,idMap).trim()+'\n\n'; }
+      else if(tag==='p'){ out+='\n'+mdInline(ch,idMap).trim()+'\n\n'; }
+      else if(tag==='ul'||tag==='ol'){ out+='\n'; Array.from(ch.querySelectorAll(':scope > li')).forEach((li,idx)=>{ out+=(tag==='ol'?(idx+1)+'. ':'- ')+mdInline(li,idMap).trim()+'\n'; }); out+='\n'; }
+      else if(tag==='blockquote'){ out+='\n> '+mdInline(ch,idMap).trim().replace(/\n/g,'\n> ')+'\n\n'; }
+      else if(tag==='pre'){ const code=ch.querySelector('code'); let lang=''; if(code){ const cls=code.getAttribute('class')||''; const m=/language-([\w+#.\-]+)/.exec(cls); if(m) lang=m[1]; } out+='\n```'+lang+'\n'+ch.textContent+'\n```\n\n'; }
+      else if(tag==='hr'){ out+='\n---\n\n'; }
+      else if(tag==='table'){ out+=mdTable(ch,idMap)+'\n\n'; }
+      else { out+=inlineEl(ch, idMap); }   // 非块元素（img/span/行内）用 inlineEl 处理自身，避免图片/行内内容丢失
+    }
+  });
+  return out;
+}
+function htmlToMarkdown(html, idMap){
   const doc=new DOMParser().parseFromString(html,'text/html');
   doc.querySelectorAll('script,style').forEach(e=>e.remove());
-  const inline=(node)=>{ let out=''; node.childNodes.forEach(ch=>{ if(ch.nodeType===3){ out+=ch.textContent; } else if(ch.nodeType===1){ const tag=ch.tagName.toLowerCase(); const inner=inline(ch); if(tag==='strong'||tag==='b') out+='**'+inner+'**'; else if(tag==='em'||tag==='i') out+='*'+inner+'*'; else if(tag==='code') out+='`'+inner+'`'; else if(tag==='a') out+='['+inner+']('+(ch.getAttribute('href')||'')+')'; else if(tag==='img') out+='!['+(ch.getAttribute('alt')||'')+']('+(ch.getAttribute('src')||'')+')'; else if(tag==='br') out+='\n'; else out+=inner; } }); return out; };
-  const mdTable=(table)=>{ const rows=Array.from(table.querySelectorAll('tr')); if(!rows.length) return ''; const cell=(tr)=>Array.from(tr.children).map(c=>inline(c).trim().replace(/\|/g,'\\|')); let md='| '+cell(rows[0]).join(' | ')+' |\n| '+Array(rows[0].children.length).fill('---').join(' | ')+' |\n'; for(let i=1;i<rows.length;i++){ md+='| '+cell(rows[i]).join(' | ')+' |\n'; } return md.trim(); };
-  const block=(node)=>{ let out=''; node.childNodes.forEach(ch=>{ if(ch.nodeType===3){ const t=ch.textContent.replace(/\s+/g,' '); if(t.trim()) out+=t; } else if(ch.nodeType===1){ const tag=ch.tagName.toLowerCase(); if(['h1','h2','h3','h4','h5','h6'].includes(tag)){ out+='\n'+'#'.repeat(+tag[1])+' '+inline(ch).trim()+'\n\n'; } else if(tag==='p'){ out+='\n'+inline(ch).trim()+'\n\n'; } else if(tag==='ul'||tag==='ol'){ out+='\n'; Array.from(ch.querySelectorAll(':scope > li')).forEach((li,idx)=>{ out+=(tag==='ol'?(idx+1)+'. ':'- ')+inline(li).trim()+'\n'; }); out+='\n'; } else if(tag==='blockquote'){ out+='\n> '+inline(ch).trim().replace(/\n/g,'\n> ')+'\n\n'; } else if(tag==='pre'){ out+='\n```\n'+ch.textContent+'\n```\n\n'; } else if(tag==='hr'){ out+='\n---\n\n'; } else if(tag==='table'){ out+=mdTable(ch)+'\n\n'; } else { out+=block(ch); } } }); return out; };
-  return block(doc.body || doc.documentElement).replace(/\n{3,}/g,'\n\n').trim();
+  return mdBlock(doc.body||doc.documentElement, idMap).replace(/\n{3,}/g,'\n\n').trim();
 }
 // 把正文里内联的 dataURL 图片抽出来存到 state.images，正文改为 asset:// 引用（避免编辑态显示一坨 base64「乱码」，且与「插入图片」一致）
 function extractInlineImages(content){
@@ -836,40 +936,157 @@ async function mammothToHtml(buf){
   const result=await window.mammoth.convertToHtml({arrayBuffer:buf});
   return result.value;
 }
-async function pdfToText(buf){
+async function loadPdfLib(){
   await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
   if(!window.pdfjsLib) throw new Error('pdf.js 未加载');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+// PDF 导入：逐页渲染成图片（保留版式/图片）+ 提取每页文本（可搜索），再整篇落库为一个笔记
+async function pdfImport(buf, fileName){
+  await loadPdfLib();
   const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
-  let txt='';
-  for(let p=1;p<=pdf.numPages;p++){ const page=await pdf.getPage(p); const content=await page.getTextContent(); txt+=content.items.map(it=>it.str||'').join(' ')+'\n\n'; }
-  return txt.trim();
+  const total=Math.min(pdf.numPages, 60);
+  let md='';
+  for(let p=1;p<=total;p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1.5});
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(vp.width); canvas.height=Math.ceil(vp.height);
+    await page.render({ canvasContext:canvas.getContext('2d'), viewport:vp }).promise;
+    const dataUrl=canvas.toDataURL('image/jpeg', 0.82);
+    const id='pdf_'+Date.now().toString(36)+'_'+p+'_'+Math.random().toString(36).slice(2,5);
+    state.images[id]={ name:(fileName||'PDF')+' 第'+p+'页', dataURL:dataUrl };
+    md+='\n![第'+p+'页 / 共'+total+'页](asset://'+id+')\n\n';
+    const content=await page.getTextContent();
+    const txt=content.items.map(it=>it.str||'').join(' ').replace(/\s+/g,' ').trim();
+    if(txt) md+='> '+txt+'\n\n';
+  }
+  return { title: fileName||'PDF 文档', level:0, children:[], content: md.trim(), anchor:null };
 }
 function importCreateNode(title, content, parentId){
   const id=uid(); state.nodes[id]={ id, title, parentId:parentId||null, tags:[], content }; return id;
 }
+// 把 HTML/Word 解析成「带层级的笔记大纲」：全局收集所有标题建树（兼容内容被 div/article 包裹的真实文档）+ 标题间兄弟内容 + 锚点 + 内部锚点链接
+function parseHtmlOutline(rawHtml, fileName){
+  const doc=new DOMParser().parseFromString(rawHtml,'text/html');
+  doc.querySelectorAll('script,style,noscript').forEach(e=>e.remove());
+  const idMap={};
+  doc.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h=>{ const id=h.getAttribute('id'); if(id) idMap[id]=(h.textContent||'').trim()||id; });
+  const docTitleRaw=(doc.querySelector('title')?.textContent||'').trim();
+  const firstH1=(doc.querySelector('h1')?.textContent||'').trim();
+  const rootTitle=docTitleRaw||firstH1||fileName||'导入文档';
+  const root={ title:rootTitle, level:0, children:[], content:'', anchor:null };
+  const heads=[...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+  const tidy=(n)=>{ n.content=n.content.replace(/[ \t]{2,}/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim(); n.children.forEach(tidy); };
+  if(!heads.length){ // 无标题：整篇作为一个节点（mdBlock 已能抓图片/行内）
+    root.content=mdBlock(doc.body||doc.documentElement, idMap).replace(/\s+/g,' ').trim();
+    tidy(root); return { root, idMap };
+  }
+  // 1) 按标题层级建树
+  const stack=[root]; const secOf=new Map();
+  heads.forEach(h=>{
+    const level=+h.tagName[1];
+    const title=(h.textContent||'').trim()||'（无标题）';
+    const sec={ title, level, children:[], content:'', anchor: h.getAttribute('id')||null };
+    while(stack.length>1 && stack[stack.length-1].level>=level) stack.pop();
+    stack[stack.length-1].children.push(sec); stack.push(sec);
+    secOf.set(h, sec);
+    if(sec.anchor) idMap[sec.anchor]=title;
+  });
+  // 2) 收集每个标题的「后续兄弟内容」直到下一个标题（兼容标题与内容同属一个容器）
+  heads.forEach((h, idx)=>{
+    const sec=secOf.get(h); let sib=h.nextElementSibling; const nextHead=heads[idx+1]||null;
+    while(sib && sib!==nextHead){ if(/^h[1-6]$/i.test(sib.tagName)) break; sec.content+=' '+mdBlock(sib, idMap); sib=sib.nextElementSibling; }
+  });
+  // 3) 首个标题之前的引导内容
+  let pre=heads[0].previousElementSibling;
+  while(pre){ if(/^h[1-6]$/i.test(pre.tagName)) break; root.content+=' '+mdBlock(pre, idMap); pre=pre.previousElementSibling; }
+  tidy(root);
+  // 避免与文档标题重复的首个 H1（自动作为根标题，不再单列节点）
+  if(root.children.length && root.children[0].level===1 && root.children[0].title===root.title){
+    const c=root.children.shift();
+    root.content=(root.content+' '+c.content).trim();
+    root.children=c.children.concat(root.children);
+  }
+  return { root, idMap };
+}
+function createNodesFromOutline(sec, parentId, counter){
+  // 读取内容/图片/格式 → 落库为干净 Markdown：内联图抽为 asset:// 资源，残留 HTML 标签统一剔除
+  let clean = extractInlineImages(sec.content || '');
+  clean = clean.replace(/<[^>]+>/g, '').replace(/[ \t]{2,}/g,' ').replace(/\n{3,}/g,'\n\n').trim();
+  const id = importCreateNode(sec.title, clean, parentId);
+  if(sec.anchor) state.nodes[id].anchor = sec.anchor;
+  if(counter) counter.n++;
+  sec.children.forEach(c=> createNodesFromOutline(c, id, counter));
+  return id;
+}
+function renderOutlinePreview(sec, depth){
+  const badge = sec.anchor ? ` <span class="anc-badge">#${escapeHtml(sec.anchor)}</span>` : '';
+  const snippet = sec.content ? `<div class="ov-snippet">${escapeHtml(sec.content.slice(0,90))}${sec.content.length>90?'…':''}</div>` : '';
+  let h=`<div class="ov-node" style="padding-left:${depth*16}px"><span class="ov-dot"></span><span class="ov-title">${escapeHtml(sec.title)}</span>${badge}${snippet}</div>`;
+  sec.children.forEach(c=> h+=renderOutlinePreview(c, depth+1));
+  return h;
+}
+let _pendingImport=null;
+function showImportPreview(items){
+  _pendingImport=items;
+  const ov=document.getElementById('import-preview');
+  const body=document.getElementById('ip-body');
+  let html='';
+  items.forEach(it=>{ html+=`<div class="ip-file">📄 ${escapeHtml(it.name)}</div>`; html+=renderOutlinePreview(it.root,0); });
+  body.innerHTML=html;
+  ov.classList.add('show');
+}
+function hideImportPreview(){ const ov=document.getElementById('import-preview'); if(ov) ov.classList.remove('show'); _pendingImport=null; }
+function confirmImport(){
+  const items=_pendingImport||[]; if(!items.length){ hideImportPreview(); return; }
+  const counter={n:0};
+  let lastId=null;
+  items.forEach(it=>{ const id=createNodesFromOutline(it.root, null, counter); if(id) lastId=id; });
+  hideImportPreview();
+  state.selectedId=lastId; state.mode='preview'; save(); render();
+  const sc=document.getElementById('editor-scroll'); if(sc) sc.scrollTop=0;
+  showToast('已导入 '+items.length+' 个文件 → '+counter.n+' 个条目（已转 Markdown，图片抽取为本地资源，外链图自动下载）');
+}
+function setupImportPreview(){
+  const ov=document.getElementById('import-preview');
+  if(!ov||ov.dataset.wired) return; ov.dataset.wired='1';
+  document.getElementById('ip-confirm').addEventListener('click', confirmImport);
+  document.getElementById('ip-cancel').addEventListener('click', hideImportPreview);
+  ov.addEventListener('click',(e)=>{ if(e.target===ov) hideImportPreview(); });
+  window.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && ov.classList.contains('show')) hideImportPreview(); });
+}
+function blobToDataURL(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(blob); }); }
+// 把 Markdown 里的外链图片 fetch 下来转成 asset:// 本地资源，确保导入后图片真实可见
+async function inlineExternalImages(md){
+  const re=/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g; const ms=[]; let m;
+  while((m=re.exec(md))!==null){ if(!/^https?:\/\//.test(m[2])) continue; ms.push(m); }
+  for(const mm of ms){ const full=mm[0], alt=mm[1], url=mm[2];
+    try{ const resp=await fetch(url,{mode:'cors'}); if(!resp.ok) continue; const du=await blobToDataURL(await resp.blob());
+      const id='imp_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);
+      state.images[id]={ name:alt||'image', dataURL:du };
+      md=md.split(full).join('!['+alt+'](asset://'+id+')');
+    }catch(e){ /* 跨域或离线则保留原外链，联网时仍能显示 */ }
+  }
+  return md;
+}
+async function inlineExternalImagesInOutline(sec){
+  if(sec.content) sec.content=await inlineExternalImages(sec.content);
+  for(const c of sec.children) await inlineExternalImagesInOutline(c);
+}
 async function importFiles(files){
-  let lastId=null, okCount=0;
+  const items=[];
   for(const f of Array.from(files)){
     const ext=(f.name.split('.').pop()||'').toLowerCase();
     const baseTitle=f.name.replace(/\.[^.]+$/,'');
     try{
-      let body='';
-      if(ext==='html'||ext==='htm'){ body=htmlToMarkdown(await readFileAsText(f)); }
-      else if(ext==='docx'){ body=htmlToMarkdown(await mammothToHtml(await f.arrayBuffer())); }
-      else if(ext==='pdf'){ body=await pdfToText(await f.arrayBuffer()); }
+      if(ext==='html'||ext==='htm'){ const r=parseHtmlOutline(await readFileAsText(f), baseTitle); await inlineExternalImagesInOutline(r.root); items.push({ root:r.root, name:f.name }); }
+      else if(ext==='docx'){ const r=parseHtmlOutline(await mammothToHtml(await f.arrayBuffer()), baseTitle); await inlineExternalImagesInOutline(r.root); items.push({ root:r.root, name:f.name }); }
+      else if(ext==='pdf'){ const root=await pdfImport(await f.arrayBuffer(), baseTitle); items.push({ root, name:f.name }); }
       else { showToast('不支持的格式：'+f.name); continue; }
-      body = extractInlineImages(body);
-      const content = body ? ('# '+baseTitle+'\n\n'+body) : ('# '+baseTitle+'\n\n（未能解析出正文，可能文件为空或解析库未加载，请重试或拖入纯文本）');
-      lastId=importCreateNode(baseTitle||f.name, content, null);
-      okCount++;
     }catch(err){ showToast('导入失败：'+f.name+'（'+(err&&err.message||err)+'）'); }
   }
-  if(okCount){
-    state.selectedId=lastId; state.mode='preview'; save(); render();
-    const sc=document.getElementById('editor-scroll'); if(sc) sc.scrollTop=0;
-    showToast('已导入 '+okCount+' 个文件，已在新笔记中以「预览」呈现原文');
-  }
+  if(items.length) showImportPreview(items);
 }
 
 function pathOf(id){ const parts=[]; let n=getNode(id); while(n){ parts.unshift(n.title); n=getNode(n.parentId); } return parts.join(' / '); }
@@ -931,6 +1148,16 @@ function moveNode(id, newParent){
   if(id===newParent) return;
   let p=newParent; while(p){ if(p===id){ showToast('不能移动到自己的子级'); return; } p=getNode(p)?.parentId; }
   getNode(id).parentId=newParent; save(); render();
+}
+
+/* ============ 树拖拽（Drag & Drop） ============ */
+let dragId = null;
+function isDescendant(id, ancestor){ let p = getNode(id)?.parentId; while(p){ if(p===ancestor) return true; p = getNode(p)?.parentId; } return false; }
+function clearDropHL(){ document.querySelectorAll('.node-row.drop-into').forEach(r=>r.classList.remove('drop-into')); }
+function setupTreeDnD(){
+  const root = document.getElementById('tree'); if(!root || root.dataset.dndReady) return; root.dataset.dndReady = '1';
+  root.addEventListener('dragover',(e)=>{ if(dragId!==null){ e.preventDefault(); e.dataTransfer.dropEffect='move'; } });
+  root.addEventListener('drop',(e)=>{ e.preventDefault(); clearDropHL(); if(dragId!==null){ moveNode(dragId, null); dragId=null; } });
 }
 
 /* ============ Tags CRUD ============ */
@@ -1162,15 +1389,59 @@ document.getElementById('reveal-btn').addEventListener('click',()=>{
 });
 window.addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); document.getElementById('search-input').focus(); } });
 
+/* ============ 安装包下载徽标（顶部左边 · 显示最新版本号） ============ */
+const PKG_REPO = 'TIANCAIZXT/pyrakb-app';
+function pkgDetectPlatform(){
+  const ua = navigator.userAgent || '';
+  if(/Mac|iPhone|iPad|Darwin/.test(ua)) return 'macos';
+  if(/Win/.test(ua)) return 'windows';
+  return 'linux';
+}
+function pkgPlatformExt(p){ return p==='macos' ? '.dmg' : p==='windows' ? '.msi' : '.deb'; }
+async function initDownloadBadge(){
+  const badge = document.getElementById('dl-badge');
+  if(!badge) return;
+  const plat = pkgDetectPlatform();
+  const ext = pkgPlatformExt(plat);
+  const fallback = `https://github.com/${PKG_REPO}/releases/latest`;
+  badge.href = fallback;
+  try{
+    const res = await fetch(`https://api.github.com/repos/${PKG_REPO}/releases/latest`, { headers: { 'Accept': 'application/vnd.github+json' } });
+    if(!res.ok) throw new Error('http '+res.status);
+    const data = await res.json();
+    const tag = (data.tag_name || '').replace(/^v/i, '');
+    const asset = (data.assets || []).find(a => a.name && a.name.toLowerCase().endsWith(ext));
+    const url = asset ? asset.browser_download_url : fallback;
+    badge.href = url;
+    let label = `安装包 v${tag || '?'} ↓`;
+    let cur = null;
+    if(HAS_TAURI && window.__TAURI__ && window.__TAURI__.app && window.__TAURI__.app.getVersion){
+      try{ cur = await window.__TAURI__.app.getVersion(); }catch(e){}
+    }
+    if(cur && tag && cur !== tag){ label = `可更新 v${tag} ↓`; badge.classList.add('update'); }
+    const verEl = badge.querySelector('.ver'); if(verEl) verEl.textContent = label;
+  }catch(e){
+    const verEl = badge.querySelector('.ver'); if(verEl) verEl.textContent = '安装包 ↓';
+    badge.href = fallback;
+  }
+  badge.addEventListener('click', (e)=>{
+    const url = badge.href;
+    if(HAS_TAURI && window.__TAURI__ && window.__TAURI__.shell && window.__TAURI__.shell.open){
+      e.preventDefault(); try{ window.__TAURI__.shell.open(url); }catch(_){ window.open(url, '_blank'); }
+    }
+  });
+}
+
 /* ============ Boot ============ */
 (async function(){
   if(!HAS_TAURI){ // 网页版：隐藏「在访达打开」按钮并标注版本
     const rb=document.getElementById('reveal-btn'); if(rb) rb.style.display='none';
-    const sub=document.querySelector('.brand .sub'); if(sub) sub.textContent='本地知识库 · 网页版';
+    const sub=document.querySelector('.brand .sub'); if(sub) sub.textContent='桌面版 · 原型演示';
   }
   if(!(await apiLoad())){ seed(); save(); }
-  applyTheme(); setView('tree'); render();
+  applyTheme(); setView('tree'); render(); setupTreeDnD(); setupImportPreview();
   if(!HAS_TAURI){ showToast('网页版：笔记存于当前浏览器本地存储；换设备或清缓存会丢失，重要资料建议安装桌面版。'); }
+  initDownloadBadge();
 })();
 </script>
 </body>
