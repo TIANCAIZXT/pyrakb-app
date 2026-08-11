@@ -253,11 +253,20 @@ fn reveal_vault() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn export_note(filename: String, contents: String) -> Result<String, String> {
+    let dir = vault_root().join("导出");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&filename);
+    std::fs::write(&path, contents).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 /* ---------- entry ---------- */
 fn main() {
     let index_html: &'static str = include_str!("../../src/index.html");
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_vault, sync_vault, reveal_vault])
+        .invoke_handler(tauri::generate_handler![load_vault, sync_vault, reveal_vault, export_note])
         .setup(move |app| {
             let cache_dir = app
                 .path()

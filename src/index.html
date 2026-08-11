@@ -74,10 +74,13 @@
   }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: .2px; }
   .brand .logo {
-    width: 26px; height: 26px; border-radius: 7px;
-    background: linear-gradient(135deg, var(--accent), #6FA0F5);
-    display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px;
+    width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
+    display: grid; place-items: center; box-shadow: 0 4px 14px rgba(46,107,230,.28);
   }
+  .brand .logo svg { display: block; }
+  @keyframes mw-flap { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-15deg); } }
+  .mw-flap { transform-box: fill-box; transform-origin: 50% 100%; animation: mw-flap 3.4s var(--ease) infinite; }
+  .brand .brand-name { font-weight: 700; }
   .brand .sub { color: var(--text-mute); font-weight: 400; font-size: 12px; margin-left: 2px; }
   #search {
     flex: 1; max-width: 420px; margin: 0 auto;
@@ -92,6 +95,14 @@
   .top-actions { display: flex; align-items: center; gap: 6px; }
   .seg { display: flex; background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 3px; }
   .seg button { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: var(--text-soft); transition: all .2s var(--ease); }
+  .doc-head-actions { display: flex; align-items: center; gap: 8px; }
+  .act-sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
+  .doc-act { font-size: 13px; padding: 6px 12px; border:1px solid var(--border); background: var(--bg-soft); color: var(--text-soft); border-radius:8px; cursor:pointer; white-space:nowrap; transition: all .2s var(--ease); }
+  .doc-act:hover { background: var(--bg-elevated); color: var(--text); border-color: var(--border-strong); }
+  .exp-wrap { position: relative; display:inline-block; }
+  .export-menu { position:absolute; right:0; top:118%; background: var(--bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.18); z-index: 220; min-width:158px; overflow:hidden; }
+  .export-menu button { display:block; width:100%; text-align:left; padding:10px 14px; border:none; background:transparent; color:var(--text); cursor:pointer; font-size:13px; }
+  .export-menu button:hover { background: var(--accent-soft); color: var(--accent); }
   .seg button.active { background: var(--bg-elevated); color: var(--accent); box-shadow: var(--shadow); font-weight: 500; }
   .icon-btn {
     width: 36px; height: 36px; border-radius: var(--radius-btn);
@@ -376,7 +387,20 @@
 <div id="app">
   <!-- Top bar -->
   <div id="topbar">
-    <div class="brand"><span class="logo">M</span> Mini Wiki <span class="sub">一个命令，一个文件夹，一个知识库</span></div>
+    <div class="brand">
+      <span class="logo" aria-label="Mini Wiki">
+        <svg viewBox="0 0 28 28" width="30" height="30" aria-hidden="true">
+          <defs><linearGradient id="mwg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2E6BE6"/><stop offset="1" stop-color="#6FA0F5"/>
+          </linearGradient></defs>
+          <rect x="0" y="0" width="28" height="28" rx="7" fill="url(#mwg)"/>
+          <path d="M4 9 a2 2 0 0 1 2 -2 h5 l2 2.5 h11 a2 2 0 0 1 2 2 v11 a2 2 0 0 1 -2 2 H4 a2 2 0 0 1 -2 -2 V9 z" fill="#ffffff" opacity="0.96"/>
+          <g class="mw-flap"><path d="M3 21 V12 a1 1 0 0 1 1 -1 h20 a1 1 0 0 1 1 1 v8 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 z" fill="#DCE8FC"/></g>
+        </svg>
+      </span>
+      <span class="brand-name">Mini Wiki</span>
+      <span class="sub">一个命令，一个文件夹，一个知识库</span>
+    </div>
     <a id="dl-badge" class="dl-badge" target="_blank" rel="noopener noreferrer" href="https://github.com/TIANCAIZXT/pyrakb-app/releases/latest"><span class="ico">📦</span><span class="ver">安装包…</span></a>
     <div id="search">
       <span>🔍</span>
@@ -547,6 +571,67 @@ function parseLinks(content){ const re=/\[\[([^\]]+)\]\]/g; const out=[]; let m;
 function backlinksOf(id){ const t=getNode(id).title.trim().toLowerCase(); const res=[]; Object.values(state.nodes).forEach(n=>{ if(n.id===id) return; const ls=parseLinks(n.content); if(ls.some(l=>l.trim().toLowerCase()===t)) res.push(n); }); return res; }
 function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+/* ============ 导出 / 复制 / 本地文件夹 ============ */
+function downloadBlob(blob, filename){
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 120);
+}
+function nodeAsMarkdown(node){
+  let md=(node.content||'');
+  const fl=md.split('\n',1)[0]||'';
+  const mh=fl.match(/^#\s+(.+?)\s*$/);
+  if(!(mh && mh[1].trim()===(node.title||'').trim())) md='# '+(node.title||'未命名')+'\n\n'+md;
+  return md.trim()+'\n';
+}
+function exportNote(fmt, node){
+  if(!node) return;
+  const title=(node.title||'未命名').replace(/[\\/:*?"<>|]/g,'_');
+  const md=nodeAsMarkdown(node);
+  if(fmt==='md'){
+    if(HAS_TAURI){ invoke('export_note',{ filename: title+'.md', contents: md }).then(p=>{ showToast('已导出 Markdown → '+p); invoke('reveal_vault').catch(()=>{}); }).catch(()=>{ downloadBlob(new Blob([md],{type:'text/markdown;charset=utf-8'}), title+'.md'); showToast('已导出 Markdown'); }); }
+    else { downloadBlob(new Blob([md],{type:'text/markdown;charset=utf-8'}), title+'.md'); showToast('已导出 Markdown'); }
+  } else if(fmt==='doc'){
+    const html=mdToHtml(md);
+    const doc='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>'+escapeHtml(node.title||'未命名')+'</title></head><body>'+html+'</body></html>';
+    if(HAS_TAURI){ invoke('export_note',{ filename: title+'.doc', contents: doc }).then(p=>{ showToast('已导出 Word → '+p); invoke('reveal_vault').catch(()=>{}); }).catch(()=>{ downloadBlob(new Blob([doc],{type:'application/msword'}), title+'.doc'); showToast('已导出 Word（.doc，含图片与格式）'); }); }
+    else { downloadBlob(new Blob([doc],{type:'application/msword'}), title+'.doc'); showToast('已导出 Word（.doc，含图片与格式）'); }
+  } else if(fmt==='pdf'){
+    const html=mdToHtml(md);
+    const w=window.open('','_blank');
+    if(!w){ showToast('浏览器拦截了弹窗，请允许后重试'); return; }
+    w.document.write('<html><head><meta charset="utf-8"><title>'+escapeHtml(node.title||'未命名')+'</title>'
+      +'<style>body{font-family:-apple-system,"Segoe UI",sans-serif;max-width:780px;margin:40px auto;padding:0 28px;line-height:1.75;color:#1a1a1a}h1,h2,h3{line-height:1.3}pre{background:#f4f4f5;padding:12px;border-radius:8px;overflow:auto}code{background:#f4f4f5;padding:2px 5px;border-radius:4px}blockquote{border-left:3px solid #ccc;margin:0;padding-left:14px;color:#555}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}img{max-width:100%}a{color:#2b6cb0}@media print{body{margin:0}}</style>'
+      +'</head><body>'+html+'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>');
+    w.document.close();
+    showToast('已弹出打印窗口，选择「另存为 PDF」即可');
+  }
+}
+function copyNoteRich(node){
+  if(!node) return;
+  const md=nodeAsMarkdown(node);
+  const html=mdToHtml(md);
+  const plain=md;
+  if(navigator.clipboard && window.ClipboardItem){
+    try{
+      const htmlBlob=new Blob([html],{type:'text/html'});
+      const textBlob=new Blob([plain],{type:'text/plain'});
+      navigator.clipboard.write([new ClipboardItem({'text/html':htmlBlob,'text/plain':textBlob})])
+        .then(()=>showToast('已复制（含文字 / 图片 / 格式，可直接粘贴到 Word、Notion）'))
+        .catch(()=>fallbackCopyText(plain));
+    }catch(e){ fallbackCopyText(plain); }
+  } else { fallbackCopyText(plain); }
+}
+function fallbackCopyText(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(()=>showToast('已复制为纯文字')).catch(()=>showToast('复制失败：浏览器不支持')); }
+  else { showToast('当前环境不支持剪贴板写入'); }
+}
+function openLocalFolder(node){
+  if(!node) return;
+  if(HAS_TAURI){ invoke('reveal_vault').catch(e=>console.error('reveal_vault failed', e)); }
+  else { const p='~/Documents/PyraKB/'+pathOf(node.id); fallbackCopyText(p); showToast('网页版数据存于浏览器本地。桌面版将在此打开文件夹：'+p+'（路径已复制）'); }
+}
+
 /* ============ Markdown ============ */
 function mdToHtml(src){
   const lines = src.replace(/\r\n/g,'\n').split('\n');
@@ -688,6 +773,18 @@ function renderEditor(){
           <button data-mode="edit">编辑</button>
           <button data-mode="preview">预览</button>
         </div>
+        <span class="act-sep"></span>
+        <button class="doc-act" id="import-btn" title="导入 Word / PDF / HTML（自动识别结构）">导入</button>
+        <button class="doc-act" id="copy-btn" title="复制整篇（文字 / 图片 / 格式，可粘贴到 Word、Notion）">复制</button>
+        <button class="doc-act" id="folder-btn" title="在文件管理器中打开本地文件夹">文件夹</button>
+        <div class="exp-wrap">
+          <button class="doc-act" id="export-btn" title="导出为文件">导出 ▾</button>
+          <div class="export-menu" id="export-menu" style="display:none">
+            <button data-fmt="md">Markdown（.md）</button>
+            <button data-fmt="doc">Word（.doc）</button>
+            <button data-fmt="pdf">PDF（打印另存）</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="toolbar">
@@ -706,7 +803,6 @@ function renderEditor(){
         <button class="fmt" data-fmt="table" title="插入表格">表格</button>
         <button class="fmt" data-fmt="link" title="双向链接">链接</button>
         <button class="fmt" data-fmt="image" title="插入图片">图片</button>
-        <button class="fmt" data-fmt="import" title="导入 Word / PDF / HTML">导入</button>
         <input type="file" id="img-input" accept="image/*" multiple style="display:none" />
         <input type="file" id="import-input" accept=".html,.htm,.docx,.pdf" multiple style="display:none" />
       </div>
@@ -764,6 +860,19 @@ function renderEditor(){
   if(imgInput) imgInput.addEventListener('change', function(){ if(this.files&&this.files.length){ insertImageFiles(this.files); } this.value=''; });
   const importInput=document.getElementById('import-input');
   if(importInput) importInput.addEventListener('change', function(){ if(this.files&&this.files.length){ importFiles(this.files); } this.value=''; });
+  // 笔记头部操作：导入 / 复制 / 文件夹 / 导出
+  const importBtn=document.getElementById('import-btn');
+  if(importBtn) importBtn.addEventListener('click',()=>openImportPicker());
+  const copyBtn=document.getElementById('copy-btn');
+  if(copyBtn) copyBtn.addEventListener('click',()=>copyNoteRich(node));
+  const folderBtn=document.getElementById('folder-btn');
+  if(folderBtn) folderBtn.addEventListener('click',()=>openLocalFolder(node));
+  const exportBtn=document.getElementById('export-btn');
+  const exportMenu=document.getElementById('export-menu');
+  if(exportBtn && exportMenu){
+    exportBtn.addEventListener('click',(e)=>{ e.stopPropagation(); const open=exportMenu.style.display!=='block'; exportMenu.style.display=open?'block':'none'; if(open){ const close=()=>{ exportMenu.style.display='none'; document.removeEventListener('click',close); }; setTimeout(()=>document.addEventListener('click',close),0); } });
+    exportMenu.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ exportMenu.style.display='none'; exportNote(b.dataset.fmt, node); }));
+  }
   // tags
   setupTagInput(node);
   inner.querySelectorAll('.chip .x').forEach(x=>x.addEventListener('click',()=>{ removeTag(node.id, x.dataset.tag); }));
