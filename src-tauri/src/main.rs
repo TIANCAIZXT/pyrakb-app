@@ -112,6 +112,16 @@ fn is_descendant(id: &str, ancestor: &str, map: &HashMap<String, NodeFull>) -> b
     false
 }
 
+fn depth_of(id: &str, map: &HashMap<String, NodeFull>) -> usize {
+    let mut d = 0;
+    let mut cur = map.get(id).and_then(|n| n.parent_id.clone());
+    while let Some(p) = cur {
+        d += 1;
+        cur = map.get(&p).and_then(|n| n.parent_id.clone());
+    }
+    d
+}
+
 /* ---------- 纯逻辑（可单测） ---------- */
 fn load_vault_inner() -> Persisted {
     let _ = fs::create_dir_all(vault_root());
@@ -128,8 +138,12 @@ fn sync_vault_inner(
     let incoming: HashMap<String, NodeFull> =
         nodes.iter().map(|n| (n.id.clone(), n.clone())).collect();
 
+    // 按新树深度升序处理（父先于子），保证子树移动时目标父目录已就绪
+    let mut ordered: Vec<&NodeFull> = nodes.iter().collect();
+    ordered.sort_by_key(|n| depth_of(&n.id, &incoming));
+
     // 1) 创建 / 重命名 / 移动 + 写入 _content.md
-    for n in nodes {
+    for n in ordered {
         let desired = match path_of(&n.id, &incoming) {
             Some(p) => p,
             None => continue,
@@ -137,6 +151,10 @@ fn sync_vault_inner(
         // 旧路径存在但路径变化 → 重命名/移动文件夹
         if let Some(old_path) = path_of(&n.id, &state.nodes) {
             if old_path.exists() && old_path != desired {
+                // 预建目标父目录，避免 rename 因父目录不存在而失败（拖到新父下也可靠）
+                if let Some(parent) = desired.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
                 let _ = fs::rename(&old_path, &desired);
             }
         }
@@ -265,17 +283,24 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // 测试体串行化：PYRAKB_VAULT_ROOT 是进程级环境变量，并行下会互相覆盖；
+    // 同时给临时目录加唯一后缀，避免残留文件干扰。
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
     fn setup() -> TempWrap {
-        let tmp = std::env::temp_dir().join(format!("pyrakb_test_{}", std::process::id()));
+        let _guard = TEST_LOCK.lock().unwrap();
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tmp = std::env::temp_dir().join(format!("pyrakb_test_{}_{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&tmp);
         let _ = fs::create_dir_all(&tmp);
-        // 设置环境变量让 vault_base 指向临时目录
         std::env::set_var("PYRAKB_VAULT_ROOT", &tmp);
-        TempWrap(tmp)
+        TempWrap(tmp, _guard)
     }
-    struct TempWrap(PathBuf);
-    impl Drop for temp_wrap {
+    struct TempWrap(PathBuf, #[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+    impl Drop for TempWrap {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
@@ -336,5 +361,32 @@ mod tests {
         sync_vault_inner(&mut state, &[node("r1", "产品V2", None, "x")], HashMap::new(), "light".into()).unwrap();
         assert!(vault_base().join("产品V2").exists(), "新名文件夹应存在");
         assert!(!vault_base().join("产品").exists(), "旧名文件夹应被移走");
+    }
+
+    #[test]
+    fn move_subtree_relocates_children_on_disk() {
+        let _t = setup();
+        let mut state = Persisted::default();
+        let nodes = vec![
+            node("r1", "产品", None, "x"),
+            node("c1", "调研", Some("r1"), "y"),
+            node("g1", "竞品", Some("c1"), "z"),
+            node("r2", "工作", None, "w"),
+        ];
+        sync_vault_inner(&mut state, &nodes, HashMap::new(), "light".into()).unwrap();
+        // 把「调研」(c1) 从「产品」(r1) 移动到「工作」(r2)
+        let moved = vec![
+            node("r1", "产品", None, "x"),
+            node("c1", "调研", Some("r2"), "y"),
+            node("g1", "竞品", Some("c1"), "z"),
+            node("r2", "工作", None, "w"),
+        ];
+        sync_vault_inner(&mut state, &moved, HashMap::new(), "light".into()).unwrap();
+        let root = vault_base();
+        assert!(
+            root.join("工作").join("调研").join("竞品").join("_content.md").exists(),
+            "工作/调研/竞品 应随父移动"
+        );
+        assert!(!root.join("产品").join("调研").exists(), "旧的 产品/调研 应被移走");
     }
 }
