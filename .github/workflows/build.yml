@@ -57,10 +57,11 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           npm run build -- --bundles app
+          APP_VER=$(node -e "console.log(require('./src-tauri/tauri.conf.json').version)")
           mkdir -p src-tauri/target/release/bundle/dmg
           hdiutil create -volname "PyraKB" \
             -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
-            -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
+            -ov -format UDZO "src-tauri/target/release/bundle/dmg/PyraKB_${APP_VER}.dmg"
 
       - name: "Build Tauri (Windows: msi)"
         if: matrix.platform == 'windows-latest'
@@ -96,7 +97,8 @@ jobs:
             \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
           echo "Uploading: $files"
           gh release upload "$TAG" $files --repo "$REPO"
-          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/PyraKB_0.1.0.dmg"
+          DMG=$(find src-tauri/target/release/bundle -name '*.dmg' | head -1)
+          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/$(basename "$DMG")"
 
   # 发版时汇总一个 dist-manifest.json，让 Skill 免 API 直接拿到各平台资产名
   publish-manifest:

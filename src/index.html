@@ -407,12 +407,7 @@
       <input id="search-input" placeholder="搜索笔记与标签…" />
       <span class="kbd">⌘K</span>
     </div>
-    <div class="top-actions">
-      <div class="seg" id="view-seg">
-        <button data-view="tree" class="active">树</button>
-        <button data-view="tags">标签</button>
-        <button data-view="graph">图谱</button>
-      </div>
+      <div class="top-actions">
       <button class="icon-btn" id="reveal-btn" title="在访达中打开知识库文件夹">📂</button>
       <button class="icon-btn" id="theme-btn" title="切换主题">🌙</button>
     </div>
@@ -1489,7 +1484,6 @@ document.getElementById('search-input').addEventListener('input',(e)=>{
 });
 
 /* ============ Top bar events ============ */
-document.getElementById('view-seg').addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(b) setView(b.dataset.view); });
 document.getElementById('add-root').addEventListener('click',addRoot);
 document.getElementById('theme-btn').addEventListener('click',()=>{ state.theme = state.theme==='dark'?'light':'dark'; applyTheme(); save(); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{
