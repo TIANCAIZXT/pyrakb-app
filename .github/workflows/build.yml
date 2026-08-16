@@ -53,14 +53,17 @@ jobs:
 
       # macOS 的 dmg 打包（bundle_dmg.sh / create-dmg）依赖 Finder/AppleScript，
       # 在无界面 CI 上必失败。这里只出 .app，再用 hdiutil 手动压 dmg（headless 可用）。
-      - name: "Build Tauri (macOS: app only + manual dmg)"
+      # 构建 universal 二进制（x86_64 + arm64），同时兼容 Intel 与 Apple Silicon Mac。
+      - name: "Build Tauri (macOS: universal app + manual dmg)"
         if: matrix.platform == 'macos-latest'
         run: |
-          npm run build -- --bundles app
+          rustup target add x86_64-apple-darwin aarch64-apple-darwin
+          npm run build -- --target universal-apple-darwin --bundles app
           mkdir -p src-tauri/target/release/bundle/dmg
+          APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
           hdiutil create -volname "PyraKB" \
             -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
-            -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
+            -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_${APP_VER}.dmg
 
       - name: "Build Tauri (Windows: msi)"
         if: matrix.platform == 'windows-latest'
@@ -92,11 +95,12 @@ jobs:
           REPO: ${{ github.repository }}
         shell: bash
         run: |
+          APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
           files=$(find src-tauri/target/release/bundle \
             \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
           echo "Uploading: $files"
           gh release upload "$TAG" $files --repo "$REPO"
-          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/PyraKB_0.1.0.dmg"
+          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/PyraKB_${APP_VER}.dmg"
 
   # 发版时汇总一个 dist-manifest.json，让 Skill 免 API 直接拿到各平台资产名
   publish-manifest:

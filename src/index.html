@@ -407,12 +407,7 @@
       <input id="search-input" placeholder="搜索笔记与标签…" />
       <span class="kbd">⌘K</span>
     </div>
-    <div class="top-actions">
-      <div class="seg" id="view-seg">
-        <button data-view="tree" class="active">树</button>
-        <button data-view="tags">标签</button>
-        <button data-view="graph">图谱</button>
-      </div>
+      <div class="top-actions">
       <button class="icon-btn" id="reveal-btn" title="在访达中打开知识库文件夹">📂</button>
       <button class="icon-btn" id="theme-btn" title="切换主题">🌙</button>
     </div>
@@ -487,8 +482,20 @@
 
 <script>
 /* ============ State & Storage ============ */
-const HAS_TAURI = !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
-const invoke = (cmd, args) => HAS_TAURI ? window.__TAURI__.core.invoke(cmd, args) : Promise.resolve();
+// Tauri 运行时（window.__TAURI__ / __TAURI_INTERNALS__）在 webview 初始化时注入，
+// 可能晚于本脚本执行。因此检测必须延迟到注入完成（waitTauri），且 invoke 内部动态判定。
+const TAURI_OK = () => !!(
+  (window.__TAURI__ && ((window.__TAURI__.core && window.__TAURI__.core.invoke) || window.__TAURI__.invoke)) ||
+  (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke)
+);
+let HAS_TAURI = false; // 在 boot 的 waitTauri 完成后置为真
+const invoke = (cmd, args) => {
+  if(!TAURI_OK()) return Promise.resolve();
+  const T = window.__TAURI__;
+  const fn = (T && T.core && T.core.invoke) || (T && T.invoke) || (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+  return fn ? fn(cmd, args) : Promise.resolve();
+};
+function waitTauri(){ return new Promise(res=>{ if(TAURI_OK()) return res(); let n=0; const iv=setInterval(()=>{ if(TAURI_OK()||++n>300){ clearInterval(iv); res(); } },10); }); }
 const LS_KEY = 'pyrakb_v1';
 function lsLoad(){ try{ const raw=localStorage.getItem(LS_KEY); if(!raw) return null; return JSON.parse(raw); }catch(e){ return null; } }
 function lsSave(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ nodes:state.nodes, images:state.images, theme:state.theme })); }catch(e){ console.error('localStorage 写入失败（可能超出浏览器配额）', e); } }
@@ -547,6 +554,16 @@ async function apiLoad(){
         return true;
       }
     } catch(e){ console.error('load_vault failed', e); }
+    // 文件层为空：尝试从旧版 localStorage 迁移（避免重装/升级丢数据）
+    const ld = lsLoad();
+    if(ld && ld.nodes && Object.keys(ld.nodes).length){
+      state.nodes = ld.nodes;
+      state.images = ld.images || {};
+      state.theme = ld.theme || 'light';
+      save(); // 写入文件层 ~/Documents/PyraKB
+      showToast('已从本地缓存迁移历史笔记到文件库（~/Documents/PyraKB）');
+      return true;
+    }
     return false;
   } else {
     const d = lsLoad();
@@ -1489,7 +1506,6 @@ document.getElementById('search-input').addEventListener('input',(e)=>{
 });
 
 /* ============ Top bar events ============ */
-document.getElementById('view-seg').addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(b) setView(b.dataset.view); });
 document.getElementById('add-root').addEventListener('click',addRoot);
 document.getElementById('theme-btn').addEventListener('click',()=>{ state.theme = state.theme==='dark'?'light':'dark'; applyTheme(); save(); });
 document.getElementById('reveal-btn').addEventListener('click',()=>{
@@ -1543,6 +1559,8 @@ async function initDownloadBadge(){
 
 /* ============ Boot ============ */
 (async function(){
+  await waitTauri();          // 等 Tauri 运行时注入完成，确保 invoke 可用
+  HAS_TAURI = TAURI_OK();
   if(!HAS_TAURI){ // 网页版：隐藏「在访达打开」按钮并标注版本
     const rb=document.getElementById('reveal-btn'); if(rb) rb.style.display='none';
     const sub=document.querySelector('.brand .sub'); if(sub) sub.textContent='桌面版 · 原型演示';

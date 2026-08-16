@@ -1,7 +1,8 @@
 // PyraKB Tauri 应用入口（真实文件层）
 //
 // 嵌入与存储方案：
-// - include_str! 编译期嵌入前端 HTML → 运行时写临时文件 → file:// 加载
+// - 前端经 Tauri 自身协议加载（WebviewUrl::App），由 generate_context! 打包 frontendDist(../src)，
+//   并自动注入 window.__TAURI__；切勿改用 file:// 外部加载（不会注入 API，invoke 全失效）。
 // - 数据落盘为真实文件：~/Documents/PyraKB/<标题>/_content.md（每个节点=文件夹+正文）
 // - 索引/图片/主题：.pyrakb/state.json
 // - 删除节点 = 软删除，文件夹移入 .pyrakb/trash/（可找回）
@@ -264,19 +265,12 @@ fn export_note(filename: String, contents: String) -> Result<String, String> {
 
 /* ---------- entry ---------- */
 fn main() {
-    let index_html: &'static str = include_str!("../../src/index.html");
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![load_vault, sync_vault, reveal_vault, export_note])
-        .setup(move |app| {
-            let cache_dir = app
-                .path()
-                .app_cache_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("pyrakb"));
-            let _ = fs::create_dir_all(&cache_dir);
-            let html_path = cache_dir.join("index.html");
-            let _ = fs::write(&html_path, index_html);
-            let url = format!("file://{}", html_path.to_string_lossy());
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
+        .setup(|app| {
+            // 关键：必须用 WebviewUrl::App 让 Tauri 经自身协议加载前端，
+            // 否则 file:// 外部页面不会注入 window.__TAURI__，invoke 全部失效。
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("PyraKB 本地知识库")
                 .inner_size(1366.0, 900.0)
                 .min_inner_size(960.0, 600.0)
