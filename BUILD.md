@@ -1,4 +1,4 @@
-# PyraKB 桌面安装包 — 构建与分发说明
+# Mini Wiki 桌面安装包 — 构建与分发说明
 
 > 当前形态：**真实文件层已落地**。Tauri 2 把现有 HTML 原型包成真正的桌面应用，**数据落盘为真实本地文件**（不再用 localStorage）：每个节点 = `~/Documents/PyraKB/<标题>/` 文件夹 + `_content.md` 正文；索引/图片/主题在 `.pyrakb/state.json`；删除节点 = 软删除（文件夹移入 `.pyrakb/trash/<id>/`，可找回）。导入解析的 Word/PDF 库仍走 CDN（需联网），后续可改 Rust 原生库离线解析。
 
@@ -15,7 +15,7 @@
    cd pyrakb-app
    git init -b main
    git add .
-   git commit -m "PyraKB v0.1.0"
+   git commit -m "Mini Wiki v0.1.3"
    # 在 github.com 新建空仓库，复制其 URL，然后：
    git remote add origin <你的仓库URL>
    git push -u origin main
@@ -24,7 +24,7 @@
 
 2. **等 CI 跑完**：进 GitHub 仓库 → **Actions** 标签 → 找 `Build Installers` 任务（每个平台几分钟到十几分钟）。绿色对勾即成功。
 
-3. **下载**：点进该次运行 → 底部 **Artifacts** 区域 → 下载 `pyrakb-windows-latest`（里面是 `PyraKB_0.1.0_x64_en-US.msi`）。同理 `pyrakb-macos-latest` 是 `.dmg`。
+3. **下载**：点进该次运行 → 底部 **Artifacts** 区域 → 下载 `pyrakb-windows-latest`（里面是 `Mini Wiki_0.1.3_x64_en-US.msi`）。同理 `pyrakb-macos-latest` 是 `.dmg`。
 
 > 想手动触发？仓库 → **Actions → Build Installers → Run workflow** 即可，不必改代码。
 > 想发正式 Release 自动出包？把 `on:` 加一行 `release: { types: [published] }` 并打 tag 即可（可随时找我加）。
@@ -56,7 +56,7 @@ pyrakb-app/
 
 > **两个已踩的坑（务必先看）**
 > 1. **前端资产嵌入损坏**：Tauri v2 的 codegen 把 `frontendDist`（HTML 原型）打进二进制时产物是**乱码**（混入垃圾文本，非我的 69KB 页面），导致窗口空白。自定义协议 `pyrakb://` 在 release 模式下 WebView 也无法正确加载。**最终方案**：`main.rs` 用 `include_str!("../../src/index.html")` 编译期嵌入 HTML → 运行时写入 `app_cache_dir/index.html` 临时文件 → `file://` 协议加载。**不要删 main.rs 里的这段，也不要改回依赖 asset 嵌入或自定义协议。**
-> 2. **DMG 在无界面环境必失败**：`tauri build` 最后调 `bundle_dmg.sh`（create-dmg）依赖 Finder/AppleScript 美化窗口，headless（含 CI）必挂。本机与 CI 都改为：先 `npx tauri build` 只出 `.app`，再用 `hdiutil create -srcfolder PyraKB.app` 手动压 `.dmg`。
+> 2. **DMG 在无界面环境必失败**：`tauri build` 最后调 `bundle_dmg.sh`（create-dmg）依赖 Finder/AppleScript 美化窗口，headless（含 CI）必挂。本机与 CI 都改为：先 `npx tauri build` 只出 `.app`，再用 `hdiutil create -srcfolder "Mini Wiki.app"` 手动压 `.dmg`。
 > 3. **Tauri 2.6+ 不会自动生成 app-command 权限**：`#[tauri::command]` 标注的命令**不会**自动产生 `allow-xxx` 权限，运行时 `invoke` 会报 `permission not found: pyrakb-app:allow-load-vault`（注意命名空间是**裸名** `allow-load-vault`，不是 `pyrakb-app:allow-load-vault`）。必须在 `src-tauri/permissions/commands.toml` 显式声明 `[[set]]` + 每个命令的 `[[permission]]`，并在 `capabilities/default.json` 的 `permissions` 数组里引用裸名（`allow-load-vault` 等）。新增任何命令都要同步加这两处，否则前端调不动。
 
 ```bash
@@ -65,10 +65,10 @@ source "$HOME/.cargo/env"     # 让 cargo 进入 PATH
 # 构建并出 .app（bundle_dmg.sh 在 headless 会跳过失败，但 .app 已生成）
 npx tauri build
 # 手动压 dmg（headless 可用）
-hdiutil create -volname "PyraKB" -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg
+hdiutil create -volname "Mini Wiki" -srcfolder "src-tauri/target/release/bundle/macos/Mini Wiki.app" -ov -format UDZO "src-tauri/target/release/bundle/dmg/Mini Wiki_0.1.3.dmg"
 ```
 
-产物：`src-tauri/target/release/bundle/dmg/PyraKB_0.1.0.dmg`（本机为 `_x64`，在 Apple Silicon 上经 Rosetta 2 运行，Intel 原生运行）。
+产物：`src-tauri/target/release/bundle/dmg/Mini Wiki_0.1.3.dmg`（本机为 `_x64`，在 Apple Silicon 上经 Rosetta 2 运行，Intel 原生运行）。
 
 **签名说明**：本机无 Apple Developer 证书，使用 ad-hoc 签名。用户首次打开若被 Gatekeeper 拦截，右键「打开」→「仍要打开」即可。**正式对外分发**需：
 - 购买 Apple Developer（$99/年）获取开发者证书；
@@ -86,7 +86,7 @@ hdiutil create -volname "PyraKB" -srcfolder src-tauri/target/release/bundle/maco
    npm install
    npm run build
    ```
-7. 产物：`src-tauri\target\release\bundle\msi\PyraKB_0.1.0_x64_en-US.msi`
+7. 产物：`src-tauri\target\release\bundle\msi\Mini Wiki_0.1.3_x64_en-US.msi`
 8. （可选）**代码签名**：准备 EV / OV 代码签名证书（如 DigiCert、Sectigo），在 `tauri.conf.json` 的 `bundle.windows` 配置 `certificateThumbprint` 与 `timestampUrl`，避免 SmartScreen 拦截。
 
 > Windows 包**无法在 macOS 上交叉构建**（Tauri 官方限制），必须在 Windows 环境或 CI（GitHub Actions）产出 `.msi`。

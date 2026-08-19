@@ -1,13 +1,14 @@
 name: Build Installers
 
-# 两种触发：
-#   1) push 到 main（或打 v* tag）：仅上传 Actions Artifacts，方便调试，不对外发布。
-#   2) 在 GitHub 网页发布一个 Release（published）：自动构建 macOS(.dmg) + Windows(.msi)
-#      + Linux(.deb)，作为该 Release 的资产挂载，并额外生成 dist-manifest.json，
-#      供 WorkBuddy Skill 通过 /releases/latest 稳定拉到最新二进制。
+# 触发：
+#   1) push 到 main：仅构建并上传 Actions Artifacts（调试用，不对外发布）。
+#   2) 打 v* tag 并 push —— 自动发布到 GitHub Release（推荐出包方式，无需手动建 Release）。
+#   3) 在 GitHub 网页发布一个 Release（published）：同样自动挂载三平台资产（备用）。
 #
-# 注意：仓库根目录本身就是项目（package.json 在根），因此所有步骤都在仓库根运行，
-#       无需 working-directory。
+# 关键改造：打 tag 即自动出包发布。push tag 时 tag 已随 --tags 推到 GitHub，
+# publish job 用自带的 GITHUB_TOKEN 调 `gh release create` 挂资产，无需本地 PAT/gh。
+#
+# 注意：仓库根目录本身就是项目（package.json 在根），所有步骤在仓库根运行，无需 working-directory。
 on:
   push:
     branches: [main]
@@ -17,7 +18,7 @@ on:
   workflow_dispatch: {}        # 允许在 GitHub 网页手动点 "Run workflow" 触发
 
 permissions:
-  contents: write              # release 事件需要写权限来挂载资产
+  contents: write              # release 需要写权限来挂载资产
 
 jobs:
   build:
@@ -61,9 +62,9 @@ jobs:
           npm run build -- --target universal-apple-darwin --bundles app
           mkdir -p src-tauri/target/release/bundle/dmg
           APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          hdiutil create -volname "PyraKB" \
-            -srcfolder src-tauri/target/release/bundle/macos/PyraKB.app \
-            -ov -format UDZO src-tauri/target/release/bundle/dmg/PyraKB_${APP_VER}.dmg
+          hdiutil create -volname "Mini Wiki" \
+            -srcfolder "src-tauri/target/release/bundle/macos/Mini Wiki.app" \
+            -ov -format UDZO "src-tauri/target/release/bundle/dmg/Mini Wiki_${APP_VER}.dmg"
 
       - name: "Build Tauri (Windows: msi)"
         if: matrix.platform == 'windows-latest'
@@ -73,12 +74,11 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: npm run build -- --bundles deb
 
-      # 调试用：push / 手动触发时上传 Artifacts
-      - name: Upload artifacts (push only)
-        if: github.event_name == 'push'
+      # 把各平台包存为 artifact，供 publish job 统一收集发布
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pyrakb-${{ matrix.platform }}
+          name: pkg-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/**/*.dmg
             src-tauri/target/release/bundle/**/*.msi
@@ -86,48 +86,42 @@ jobs:
             src-tauri/target/release/bundle/**/*.AppImage
           if-no-files-found: error
 
-      # 发版用：把各平台包挂到当前 Release 资产
-      - name: Upload release assets (release only)
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          files=$(find src-tauri/target/release/bundle \
-            \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
-          echo "Uploading: $files"
-          gh release upload "$TAG" $files --repo "$REPO"
-          echo "Mac DMG direct: https://github.com/$REPO/releases/download/$TAG/PyraKB_${APP_VER}.dmg"
-
-  # 发版时汇总一个 dist-manifest.json，让 Skill 免 API 直接拿到各平台资产名
-  publish-manifest:
-    if: github.event_name == 'release'
+  # 单一发布点：收集三平台包 → 创建/更新 Release 并挂载资产 + dist-manifest.json
+  publish:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Generate dist manifest
+
+      - name: Download all package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect packages + generate manifest
+        id: collect
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
-          gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[].name' > /tmp/assets.txt
-          cat /tmp/assets.txt
-          python3 - <<'PY'
-          import json
-          tag = "${{ github.event.release.tag_name }}"
-          repo = "${{ github.repository }}"
-          assets = [l.strip() for l in open('/tmp/assets.txt') if l.strip()]
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
+          files=$(find artifacts -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
+          echo "Packages found:"; echo "$files"
+          names=$(echo "$files" | xargs -n1 basename)
+          python3 - <<PY
+          import json, os
+          tag = os.environ["TAG"]
+          repo = os.environ["REPO"]
+          files = os.environ["files"].splitlines()
+          names = [os.path.basename(f) for f in files if f.strip()]
           def pick(ext):
-              for a in assets:
-                  if a.lower().endswith(ext):
-                      return a
+              for n in names:
+                  if n.lower().endswith(ext):
+                      return n
               return None
           manifest = {
               "version": tag,
@@ -143,9 +137,20 @@ jobs:
               json.dump(manifest, f, indent=2)
           print(open("dist-manifest.json").read())
           PY
-      - name: Upload manifest to release
+          # 把包文件列表写入环境变量，供下一步使用（空格分隔）
+          echo "PKG_FILES<<EOF" >> "$GITHUB_ENV"
+          echo "$files" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Create or update Release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-          REPO: ${{ github.repository }}
-        run: gh release upload "$TAG" dist-manifest.json --repo "$REPO"
+        run: |
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG exists → upload assets"
+            gh release upload "$TAG" --repo "$REPO" --clobber $PKG_FILES dist-manifest.json
+          else
+            echo "Create Release $TAG and upload assets"
+            gh release create "$TAG" --repo "$REPO" --generate-notes --latest \
+              $PKG_FILES dist-manifest.json
+          fi

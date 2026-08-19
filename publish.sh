@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PyraKB 一键发布脚本
-# 作用：把本地 pyrakb-app 仓库推到 GitHub 并发布 v0.1.0 Release，上传 macOS DMG，
+# Mini Wiki 一键发布脚本
+# 作用：把本地 pyrakb-app 仓库推到 GitHub 并发布 v0.1.3 Release，上传 macOS DMG，
 #       同时把仓库地址写回 ../.workbuddy/skills/pyrakb-installer/config.json（供 Skill 拉包）。
 #
 # 前置（二选一）：
@@ -14,16 +14,16 @@
 set -euo pipefail
 
 REPO_NAME="${REPO_NAME:-pyrakb-app}"
-TAG="v0.1.0"
-TITLE="PyraKB v0.1.0"
+TAG="v0.1.3"
+TITLE="Mini Wiki v0.1.3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# DMG 路径：默认工作区根目录的 PyraKB_0.1.0_macOS.dmg
-DMG_PATH="${DMG_PATH:-$SCRIPT_DIR/../PyraKB_0.1.0_macOS.dmg}"
+# DMG 路径：默认工作区根目录的 Mini Wiki_0.1.3_x64.dmg
+DMG_PATH="${DMG_PATH:-$SCRIPT_DIR/../Mini Wiki_0.1.3_x64.dmg}"
 if [ ! -f "$DMG_PATH" ]; then
   echo "✗ 找不到安装包：$DMG_PATH"
-  echo "  请先把构建好的 PyraKB_0.1.0_macOS.dmg 放到 pyrakb-app 的上级目录（工作区根）。"
+  echo "  请先把构建好的 Mini Wiki_0.1.3_x64.dmg 放到 pyrakb-app 的上级目录（工作区根）。"
   exit 1
 fi
 
@@ -69,7 +69,7 @@ if gh repo view "$REPO_NAME" >/dev/null 2>&1; then
   git remote remove origin 2>/dev/null || true
   git remote add origin "https://github.com/$GH_LOGIN/$REPO_NAME.git"
 else
-  gh repo create "$REPO_NAME" --public --source . --remote origin --push --description "PyraKB — 真实文件层本地知识库（Tauri 2）"
+  gh repo create "$REPO_NAME" --public --source . --remote origin --push --description "Mini Wiki — 真实文件层本地知识库（Tauri 2）"
 fi
 git push -u origin main
 
@@ -80,9 +80,9 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 else
   gh release create "$TAG" "$DMG_PATH" \
     --title "$TITLE" \
-    --notes "PyraKB 首个发布版（真实文件层）。
+    --notes "Mini Wiki 首个发布版（真实文件层）。
 
-- macOS: PyraKB_0.1.0_macOS.dmg（双击安装；首次若被拦截，右键「打开」→「仍要打开」）
+- macOS: Mini Wiki_0.1.3_x64.dmg（双击安装；首次若被拦截，右键「打开」→「仍要打开」）
 - Windows / Linux 包由 CI（build.yml）在后续发版自动生成并挂到本 Release。
 
 数据位于 ~/Documents/PyraKB，新建目录=真实文件夹+_content.md，删除软删到 .pyrakb/trash/。"
@@ -98,7 +98,7 @@ import json, sys
 p, repo = sys.argv[1], sys.argv[2]
 d = json.load(open(p))
 d["repo"] = repo
-d["fallbackTag"] = "v0.1.0"
+d["fallbackTag"] = "v0.1.3"
 json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
 print("已写入 repo =", repo)
 PY
@@ -110,5 +110,5 @@ RELEASE_URL="https://github.com/$GH_LOGIN/$REPO_NAME/releases/tag/$TAG"
 echo ""
 echo "✅ 完成！Release 地址："
 echo "   $RELEASE_URL"
-echo "   Skill 现在可从该 Release 拉取 PyraKB_0.1.0_macOS.dmg。"
+echo "   Skill 现在可从该 Release 拉取 Mini Wiki_0.1.3_x64.dmg。"
 echo "   Windows/Linux 包：推到 GitHub 后，Actions 会自动构建并挂到这个 Release（见 build.yml）。"

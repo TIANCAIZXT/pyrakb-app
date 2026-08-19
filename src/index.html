@@ -26,6 +26,12 @@
     --sidebar-w: 250px;
     --measure: 820px;
     --ease: cubic-bezier(.4,0,.2,1);
+    --bg-grad: linear-gradient(135deg, #eef2ff, #e9f7ff);
+    --glass-top: rgba(255,255,255,.62);
+    --glass-side: rgba(255,255,255,.55);
+    --glass-main: rgba(255,255,255,.74);
+    --glass-border: rgba(255,255,255,.6);
+    --blob1: #6d9bff; --blob2: #46e0c8; --blob3: #b98cff; --blob4: #ffd36e;
   }
   [data-theme="dark"] {
     --bg: #18181A;
@@ -42,6 +48,12 @@
     --danger: #F0726B;
     --danger-soft: #3A2220;
     --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    --bg-grad: linear-gradient(135deg, #0e1422, #161d33);
+    --glass-top: rgba(28,30,38,.6);
+    --glass-side: rgba(28,30,38,.5);
+    --glass-main: rgba(28,30,38,.8);
+    --glass-border: rgba(255,255,255,.12);
+    --blob1: #2a3f7a; --blob2: #1f5a52; --blob3: #4a3a73; --blob4: #6b5524;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,18 +61,31 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                  "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    background: var(--bg);
+    background: var(--bg-grad);
     color: var(--text);
     font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
+  /* 动态光斑背景 */
+  .bg-blobs { position: fixed; inset: -20%; z-index: 0; pointer-events: none; overflow: hidden; }
+  .bg-blobs .blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .5; will-change: transform; }
+  .bg-blobs .b1 { width: 46vw; height: 46vw; left: 2%; top: 4%; background: radial-gradient(circle, var(--blob1), transparent 70%); animation: mw-float1 16s ease-in-out infinite; }
+  .bg-blobs .b2 { width: 42vw; height: 42vw; right: 0%; top: 14%; background: radial-gradient(circle, var(--blob2), transparent 70%); animation: mw-float2 19s ease-in-out infinite; }
+  .bg-blobs .b3 { width: 40vw; height: 40vw; left: 24%; bottom: -6%; background: radial-gradient(circle, var(--blob3), transparent 70%); animation: mw-float3 22s ease-in-out infinite; }
+  .bg-blobs .b4 { width: 34vw; height: 34vw; right: 18%; bottom: 2%; background: radial-gradient(circle, var(--blob4), transparent 70%); animation: mw-float4 25s ease-in-out infinite; }
+  @keyframes mw-float1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,30px) scale(1.12)} }
+  @keyframes mw-float2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-36px,28px) scale(1.1)} }
+  @keyframes mw-float3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(30px,-28px) scale(1.15)} }
+  @keyframes mw-float4 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-28px,-24px) scale(1.08)} }
+  @media (prefers-reduced-motion: reduce) { .bg-blobs .blob { animation: none; } }
+
   button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
   ::selection { background: var(--accent-soft); }
 
   /* ===== Layout ===== */
-  #app { display: flex; flex-direction: column; height: 100vh; }
+  #app { display: flex; flex-direction: column; height: 100vh; position: relative; z-index: 1; }
 
   /* Top bar */
   #topbar {
@@ -68,8 +93,10 @@
     flex: 0 0 var(--topbar-h);
     display: flex; align-items: center; gap: 18px;
     padding: 0 22px;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border);
+    background: var(--glass-top);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid var(--glass-border);
     z-index: 20;
   }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: .2px; }
@@ -129,7 +156,10 @@
   /* Sidebar */
   #sidebar {
     width: var(--sidebar-w); flex: 0 0 var(--sidebar-w);
-    background: var(--bg-soft); border-right: 1px solid var(--border);
+    background: var(--glass-side);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    border-right: 1px solid var(--glass-border);
     display: flex; flex-direction: column; min-height: 0;
   }
   .side-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; }
@@ -148,7 +178,7 @@
     transition: background .15s var(--ease);
   }
   .node-row:hover { background: var(--bg-elevated); }
-  .node-row.selected { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  .node-row.selected { background: var(--accent-soft); color: var(--accent); font-weight: 500; box-shadow: inset 3px 0 0 0 var(--accent); }
   .node-row .twist { width: 14px; height: 14px; flex: 0 0 14px; color: var(--text-mute); transition: transform .2s var(--ease); display: grid; place-items: center; font-size: 10px; }
   .node-row.collapsed .twist { transform: rotate(-90deg); }
   .node-row .twist.leaf { visibility: hidden; }
@@ -159,7 +189,21 @@
   .node-row .row-add:hover { background: var(--accent-soft); color: var(--accent); }
   .node-row.drop-into { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
   .node-row.drop-into .label { color: var(--accent); font-weight: 500; }
+  .node-row.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+  .node-row.drop-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
+  .node-row.drop-before .label, .node-row.drop-after .label { color: var(--accent); font-weight: 500; }
   .node-row.dragging { opacity: .35; }
+  #tree.drop-root { box-shadow: inset 0 -3px 0 0 var(--accent); }
+  /* 拖拽时跟随指针的幽灵标签 */
+  .drag-ghost {
+    position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none;
+    padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.25);
+    transform: translate(-8px, -8px); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* 拖拽进行中：禁止文本选择，避免原生选择干扰 */
+  body.dragging-active { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+  body.dragging-active .node-row { cursor: grabbing; }
   .inline-input {
     flex: 1; border: 1px solid var(--accent); background: var(--bg-elevated);
     border-radius: 6px; padding: 3px 6px; font-size: 14px; outline: none; color: var(--text);
@@ -178,9 +222,16 @@
   .tag-item:hover .tag-del { opacity: 1; }
   .tag-item .tag-del:hover { background: var(--danger-soft); color: var(--danger); }
   .tag-empty { padding: 24px 14px; color: var(--text-mute); font-size: 13px; text-align: center; }
+  .filter-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 4px 10px; padding: 7px 12px; background: var(--accent-soft); color: var(--accent); border-radius: 9px; font-size: 13px; }
+  .filter-banner b { font-weight: 600; }
+  .filter-banner .fcnt { font-style: normal; background: #fff; border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; font-size: 11px; margin-left: 2px; }
+  .filter-banner .fclear { cursor: pointer; opacity: .8; }
+  .filter-banner .fclear:hover { opacity: 1; text-decoration: underline; }
+  .node-row.tag-hit > .label { color: var(--accent); font-weight: 600; }
+  .node-row.tag-hit { box-shadow: inset 3px 0 0 var(--accent); }
 
   /* Main */
-  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--glass-main); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
   #editor-scroll { flex: 1; overflow-y: auto; }
   #editor-inner { max-width: var(--measure); margin: 0 auto; padding: 48px 32px 80px; }
 
@@ -297,6 +348,11 @@
   .modal h3 { font-size: 18px; margin-bottom: 10px; }
   .modal p { color: var(--text-soft); font-size: 14px; margin-bottom: 18px; }
   .modal .actions { display: flex; justify-content: flex-end; gap: 10px; }
+  /* 剪藏收录面板 */
+  .clip-field { font-size: 12px; color: var(--text-soft); margin: 12px 0 5px; }
+  .clip-input { width: 100%; box-sizing: border-box; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-soft); color: var(--text); font: inherit; font-size: 14px; }
+  .clip-input:focus { outline: none; border-color: var(--accent); }
+  #clip-preview { max-height: 170px; overflow: auto; font-size: 13px; line-height: 1.6; color: var(--text-soft); background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; }
   .btn { padding: 9px 18px; border-radius: var(--radius-btn); font-size: 14px; transition: all .15s var(--ease); }
   .btn.ghost { color: var(--text-soft); }
   .btn.ghost:hover { background: var(--bg-soft); }
@@ -384,18 +440,34 @@
 </style>
 </head>
 <body>
+<div class="bg-blobs" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span><span class="blob b4"></span></div>
 <div id="app">
   <!-- Top bar -->
   <div id="topbar">
     <div class="brand">
       <span class="logo" aria-label="Mini Wiki">
-        <svg viewBox="0 0 28 28" width="30" height="30" aria-hidden="true">
-          <defs><linearGradient id="mwg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#2E6BE6"/><stop offset="1" stop-color="#6FA0F5"/>
-          </linearGradient></defs>
-          <rect x="0" y="0" width="28" height="28" rx="7" fill="url(#mwg)"/>
-          <path d="M4 9 a2 2 0 0 1 2 -2 h5 l2 2.5 h11 a2 2 0 0 1 2 2 v11 a2 2 0 0 1 -2 2 H4 a2 2 0 0 1 -2 -2 V9 z" fill="#ffffff" opacity="0.96"/>
-          <g class="mw-flap"><path d="M3 21 V12 a1 1 0 0 1 1 -1 h20 a1 1 0 0 1 1 1 v8 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 z" fill="#DCE8FC"/></g>
+        <svg viewBox="0 0 256 256" width="30" height="30" aria-hidden="true">
+          <rect x="24" y="24" width="208" height="208" rx="48" fill="#2E6BE6"/>
+          <path d="M128 92 C104 82 74 80 56 88 L56 172 C76 164 106 168 128 180 Z" fill="#FFFFFF"/>
+          <path d="M128 92 C152 82 182 80 200 88 L200 172 C180 164 150 168 128 180 Z" fill="#EAF1FE"/>
+          <path d="M128 92 L128 180" stroke="#2E6BE6" stroke-width="3" stroke-linecap="round" opacity="0.22"/>
+          <g stroke="#2E6BE6" stroke-width="4" stroke-linecap="round" opacity="0.85">
+            <line x1="68" y1="110" x2="108" y2="108"/>
+            <line x1="68" y1="126" x2="112" y2="124"/>
+            <line x1="68" y1="142" x2="100" y2="141"/>
+          </g>
+          <g stroke="#2E6BE6" stroke-width="3" opacity="0.9" stroke-linecap="round">
+            <line x1="128" y1="112" x2="143" y2="127"/>
+            <line x1="143" y1="127" x2="128" y2="142"/>
+            <line x1="128" y1="142" x2="113" y2="127"/>
+            <line x1="113" y1="127" x2="128" y2="112"/>
+          </g>
+          <g fill="#2E6BE6">
+            <circle cx="128" cy="112" r="5"/>
+            <circle cx="143" cy="127" r="5"/>
+            <circle cx="128" cy="142" r="5"/>
+            <circle cx="113" cy="127" r="5"/>
+          </g>
         </svg>
       </span>
       <span class="brand-name">Mini Wiki</span>
@@ -537,7 +609,7 @@ function seed(){
 
 function save(){ // 双模式：桌面走 Tauri 真实文件层；网页走浏览器本地存储
   if(HAS_TAURI){
-    const nodes = Object.values(state.nodes).map(n=>({ id:n.id, title:n.title, parentId:n.parentId, tags:n.tags||[], content:n.content||'' }));
+    const nodes = Object.values(state.nodes).map(n=>({ id:n.id, title:n.title, parentId:n.parentId, tags:n.tags||[], content:n.content||'', order: n.order||0 }));
     invoke('sync_vault', { nodes, images: state.images, theme: state.theme }).catch(e=>console.error('sync_vault failed', e));
   } else {
     lsSave();
@@ -578,8 +650,8 @@ async function apiLoad(){
 }
 
 /* ============ Helpers ============ */
-function roots(){ return Object.values(state.nodes).filter(n => n.parentId == null); }
-function childrenOf(id){ return Object.values(state.nodes).filter(n => n.parentId === id); }
+function roots(){ return Object.values(state.nodes).filter(n => n.parentId == null).sort((a,b)=>(a.order||0)-(b.order||0)); }
+function childrenOf(id){ return Object.values(state.nodes).filter(n => n.parentId === id).sort((a,b)=>(a.order||0)-(b.order||0)); }
 function getNode(id){ return state.nodes[id]; }
 function levelOf(id){ let l=1, n=getNode(id); while(n && n.parentId){ l++; n=getNode(n.parentId); } return l; }
 function titleToId(title){ const t=title.trim().toLowerCase(); const f=Object.values(state.nodes).find(n=>n.title.trim().toLowerCase()===t); return f?f.id:null; }
@@ -719,23 +791,33 @@ function render(){
 
 function renderTree(){
   const root = document.getElementById('tree'); root.innerHTML='';
+  if(state.filterTag){
+    const b=document.createElement('div'); b.className='filter-banner';
+    b.innerHTML=`<span>筛选标签：<b>${escapeHtml(state.filterTag)}</b> <i class="fcnt">${Object.values(state.nodes).filter(n=>n.tags.includes(state.filterTag)).length}</i></span><span class="fclear" title="清除筛选">✕ 清除</span>`;
+    b.querySelector('.fclear').addEventListener('click',(e)=>{ e.stopPropagation(); state.filterTag=null; render(); });
+    root.appendChild(b);
+  }
   const build=(pid, container)=>{
     childrenOf(pid).forEach(n=>{
-      const row=document.createElement('div'); row.className='node-row'; row.dataset.id=n.id; row.setAttribute('draggable','true');
+      if(!nodeMatchesFilter(n)) return;
+      const row=document.createElement('div'); row.className='node-row'; row.dataset.id=n.id;
       if(n.id===state.selectedId) row.classList.add('selected');
+      if(state.filterTag && n.tags.includes(state.filterTag)) row.classList.add('tag-hit');
       const kids=childrenOf(n.id);
       const tw=document.createElement('span'); tw.className='twist'+(kids.length?'':' leaf'); tw.textContent='▾';
       const label=document.createElement('span'); label.className='label'; label.textContent=n.title;
       const add=document.createElement('span'); add.className='row-add'; add.textContent='＋'; add.title='新建子节点';
       row.append(tw,label,add);
-      row.addEventListener('click',(e)=>{ if(e.target===add) return; if(e.target===tw){ row.classList.toggle('collapsed'); const ch=row.nextElementSibling; if(ch&&ch.classList.contains('children')) ch.classList.toggle('hidden'); return; } selectNode(n.id); });
+      row.addEventListener('click',(e)=>{ if(suppressClick){ suppressClick=false; return; } if(e.target===add) return; if(e.target===tw){ row.classList.toggle('collapsed'); const ch=row.nextElementSibling; if(ch&&ch.classList.contains('children')) ch.classList.toggle('hidden'); return; } selectNode(n.id); });
       add.addEventListener('click',(e)=>{ e.stopPropagation(); addChild(n.id); });
       row.addEventListener('contextmenu',(e)=>{ e.preventDefault(); openCtx(e, n.id); });
-      row.addEventListener('dragstart',(e)=>{ dragId=n.id; row.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; try{ e.dataTransfer.setData('text/plain', n.id); }catch(_){} });
-      row.addEventListener('dragend',()=>{ row.classList.remove('dragging'); clearDropHL(); dragId=null; });
-      row.addEventListener('dragover',(e)=>{ if(dragId===null || dragId===n.id || isDescendant(n.id, dragId)) return; e.preventDefault(); e.dataTransfer.dropEffect='move'; clearDropHL(); row.classList.add('drop-into'); });
-      row.addEventListener('dragleave',()=>{ row.classList.remove('drop-into'); });
-      row.addEventListener('drop',(e)=>{ e.preventDefault(); e.stopPropagation(); clearDropHL(); const tid=n.id; if(dragId!==null && dragId!==tid && !isDescendant(tid, dragId)){ moveNode(dragId, tid); } dragId=null; });
+      // Pointer 拖拽：在行上按下并移动超过阈值即开始拖拽；点击（无移动）仍用于选中
+      row.addEventListener('pointerdown',(e)=>{
+        suppressClick=false;                              // 清除上一次可能残留的抑制标记
+        if(e.target===add || e.target===tw) return;       // 控件点击不触发拖拽
+        if(e.button!==0 && e.pointerType==='mouse') return; // 仅左键
+        pdrag = { id: n.id, el: row, startX: e.clientX, startY: e.clientY, started: false, ghost: null, curTarget: null, curPos: 'into' };
+      });
       container.appendChild(row);
       if(kids.length){ const ch=document.createElement('div'); ch.className='children'; build(n.id, ch); container.appendChild(ch); }
     });
@@ -751,16 +833,28 @@ function renderTags(){
     const cnt=Object.values(state.nodes).filter(n=>n.tags.includes(t)).length;
     const item=document.createElement('div'); item.className='tag-item'+(state.filterTag===t?' active':'');
     item.innerHTML=`<span class="tag-dot"></span><span class="tag-name">${escapeHtml(t)}</span><span class="tag-cnt">${cnt}</span>`;
-    item.addEventListener('click',()=>{ state.filterTag = state.filterTag===t?null:t; selectNodeByTag(t); });
+    item.addEventListener('click',()=>{ toggleTagFilter(t); });
     const del=document.createElement('span'); del.className='tag-del'; del.textContent='✕'; del.title='删除标签';
     del.addEventListener('click',(e)=>{ e.stopPropagation(); confirmDeleteTag(t); });
     item.appendChild(del);
     el.appendChild(item);
   });
 }
-function selectNodeByTag(t){
-  const first=Object.values(state.nodes).find(n=>n.tags.includes(t));
-  if(first){ setView('tree'); selectNode(first.id); }
+// 点击侧栏标签：切换“按标签筛选”视图（保留祖先路径，只显示带该标签的节点）
+function toggleTagFilter(t){
+  state.filterTag = state.filterTag===t ? null : t;
+  if(state.filterTag && state.view!=='tree') setView('tree');
+  render();
+  if(state.filterTag){
+    const first = Object.values(state.nodes).find(n=>n.tags.includes(state.filterTag));
+    if(first) selectNode(first.id);
+  }
+}
+// 节点自身或任一后代含当前筛选标签 → 在过滤视图中可见
+function nodeMatchesFilter(n){
+  if(!state.filterTag) return true;
+  if(n.tags.includes(state.filterTag)) return true;
+  return childrenOf(n.id).some(c=>nodeMatchesFilter(c));
 }
 
 function renderEditor(){
@@ -1240,7 +1334,9 @@ function addRoot(){ addChild(null); }
 function addChild(parentId){
   const id=uid(); const base = parentId? '新建子节点' : '新建条目';
   let name=base, k=1; while(Object.values(state.nodes).some(n=>n.title===name && n.parentId===parentId)){ name=base+(++k); }
-  state.nodes[id]={ id, title:name, parentId, tags:[], content:'' };
+  const sibs=childrenOf(parentId);
+  const maxOrder = sibs.length ? sibs[sibs.length-1].order || 0 : -1;
+  state.nodes[id]={ id, title:name, parentId, tags:[], content:'', order: maxOrder+1 };
   state.selectedId=id; save(); render();
   // inline rename focus
   setTimeout(()=>{ const row=document.querySelector(`.node-row[data-id="${id}"] .label`); if(row){ startInlineRename(id, row); } },30);
@@ -1276,14 +1372,98 @@ function moveNode(id, newParent){
   getNode(id).parentId=newParent; save(); render();
 }
 
-/* ============ 树拖拽（Drag & Drop） ============ */
-let dragId = null;
+/* ============ 树拖拽（Pointer 事件实现，兼容 WKWebView） ============ */
 function isDescendant(id, ancestor){ let p = getNode(id)?.parentId; while(p){ if(p===ancestor) return true; p = getNode(p)?.parentId; } return false; }
-function clearDropHL(){ document.querySelectorAll('.node-row.drop-into').forEach(r=>r.classList.remove('drop-into')); }
+function clearDropHL(){ document.querySelectorAll('.node-row.drop-into, .node-row.drop-before, .node-row.drop-after, .node-row.drop-root').forEach(r=>r.classList.remove('drop-into','drop-before','drop-after','drop-root')); }
+// 保证每个父级（含根）下的子节点拥有连续 0..n 的 order，便于排序与持久化
+function normalizeOrders(){
+  const parents = new Set([null]);
+  Object.values(state.nodes).forEach(n=> parents.add(n.parentId));
+  parents.forEach(pid=>{
+    const sibs = childrenOf(pid);
+    sibs.forEach((n,i)=>{ n.order = i; });
+  });
+}
+// 拖拽落点：pos = 'before'（插到目标前/同级上方） | 'after'（插到目标后/同级下方） | 'into'（收为目标子节点）；targetId 为 null 表示移到根
+function moveNodeRel(id, targetId, pos){
+  const node = getNode(id); if(!node) return;
+  if(targetId===null){ // 拖到空白区 → 移到根末尾
+    node.parentId = null;
+    const sibs = childrenOf(null).filter(n=>n.id!==id);
+    node.order = (sibs.length ? sibs[sibs.length-1].order : -1) + 1;
+    save(); renderTree(); return;
+  }
+  if(id===targetId) return;
+  let p=targetId; while(p){ if(p===id){ showToast('不能移动到自己的子级'); return; } p=getNode(p)?.parentId; }
+  const target = getNode(targetId); if(!target) return;
+  const newParent = (pos==='into') ? targetId : target.parentId;
+  node.parentId = newParent;
+  const sibs = childrenOf(newParent).filter(n=>n.id!==id);
+  let idx;
+  if(pos==='into'){ idx = sibs.length; }
+  else { const ti = sibs.findIndex(n=>n.id===targetId); idx = (ti<0) ? sibs.length : (pos==='before' ? ti : ti+1); }
+  sibs.splice(idx, 0, node);
+  sibs.forEach((n,i)=>{ n.order = i; });
+  save(); renderTree();
+}
+
+/* ---- Pointer 拖拽状态机（鼠标 / 触控统一，不依赖原生 HTML5 DnD） ---- */
+let pdrag = null;        // { id, el, startX, startY, started, ghost, curTarget, curPos }
+let suppressClick = false;
+const DRAG_THRESHOLD = 5;
+
+function pdragFindTarget(y){
+  const rows = [...document.querySelectorAll('.node-row')]
+    .filter(r => r.dataset.id !== pdrag.id && !isDescendant(r.dataset.id, pdrag.id));
+  for(const r of rows){
+    const rect = r.getBoundingClientRect();
+    if(y >= rect.top && y <= rect.bottom){
+      const rel = (y - rect.top) / rect.height;
+      return { row: r, pos: rel < 0.3 ? 'before' : (rel > 0.7 ? 'after' : 'into') };
+    }
+  }
+  return null;
+}
+function pdragOnMove(e){
+  if(!pdrag) return;
+  if(!pdrag.started){
+    const dx = e.clientX - pdrag.startX, dy = e.clientY - pdrag.startY;
+    if(Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    pdrag.started = true;
+    const g = document.createElement('div'); g.className = 'drag-ghost';
+    g.textContent = getNode(pdrag.id)?.title || '';
+    document.body.appendChild(g); pdrag.ghost = g;
+    document.body.classList.add('dragging-active');
+  }
+  pdrag.ghost.style.left = e.clientX + 'px';
+  pdrag.ghost.style.top = e.clientY + 'px';
+  clearDropHL();
+  const hit = pdragFindTarget(e.clientY);
+  if(hit){
+    hit.row.classList.add('drop-' + hit.pos);
+    pdrag.curTarget = hit.row.dataset.id; pdrag.curPos = hit.pos;
+  } else {
+    pdrag.curTarget = null; pdrag.curPos = 'into';
+    document.getElementById('tree').classList.add('drop-root');
+  }
+}
+function pdragOnUp(){
+  if(!pdrag) return;
+  const d = pdrag; pdrag = null;
+  if(d.started){
+    if(d.ghost) d.ghost.remove();
+    document.body.classList.remove('dragging-active');
+    clearDropHL();
+    if(d.curTarget){ moveNodeRel(d.id, d.curTarget, d.curPos); }
+    else { moveNodeRel(d.id, null, 'into'); }
+    suppressClick = true; // 本次指针操作是拖拽，阻止随后的 click 误触发选中
+  }
+}
 function setupTreeDnD(){
-  const root = document.getElementById('tree'); if(!root || root.dataset.dndReady) return; root.dataset.dndReady = '1';
-  root.addEventListener('dragover',(e)=>{ if(dragId!==null){ e.preventDefault(); e.dataTransfer.dropEffect='move'; } });
-  root.addEventListener('drop',(e)=>{ e.preventDefault(); clearDropHL(); if(dragId!==null){ moveNode(dragId, null); dragId=null; } });
+  if(document.body.dataset.pdndReady) return; document.body.dataset.pdndReady = '1';
+  document.addEventListener('pointermove', pdragOnMove, { passive: true });
+  document.addEventListener('pointerup', pdragOnUp);
+  document.addEventListener('pointercancel', pdragOnUp);
 }
 
 /* ============ Tags CRUD ============ */
@@ -1340,6 +1520,49 @@ function showToast(msg, onUndo){
   t.classList.add('show');
   const u=t.querySelector('.undo'); if(onUndo) u.onclick=()=>{ onUndo(); t.classList.remove('show'); };
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), 5000);
+}
+
+/* ============ 浏览器剪藏收录面板 ============ */
+// 监听 Rust 端 emit 的 clip-incoming 事件，弹出"收录到 Mini Wiki"面板
+function showClipInbox(p){
+  const ov=document.getElementById('overlay'); const md=document.getElementById('modal');
+  const opts=['<option value="">（新建顶层节点）</option>']
+    .concat(roots().map(n=>`<option value="${n.id}">${escapeHtml(n.title)}</option>`));
+  md.innerHTML=`<h3>收录到 Mini Wiki</h3>
+    <div class="clip-field">标题</div>
+    <input id="clip-title" class="clip-input" value="${escapeHtml(p.title||'')}" />
+    <div class="clip-field">保存到</div>
+    <select id="clip-target" class="clip-input">${opts.join('')}</select>
+    <div class="clip-field">内容预览</div>
+    <div id="clip-preview">${escapeHtml(p.text||'')}</div>
+    <div class="actions" style="margin-top:18px;">
+      <button class="btn ghost" id="clip-cancel">取消</button>
+      <button class="btn primary" id="clip-save">收录</button>
+    </div>`;
+  ov.style.display='flex';
+  const close=()=>{ ov.style.display='none'; document.removeEventListener('keydown', onKey); };
+  const onKey=(e)=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  document.getElementById('clip-cancel').onclick=close;
+  document.getElementById('clip-save').onclick=async ()=>{
+    const title=document.getElementById('clip-title').value.trim()||p.title||'网页剪藏';
+    const targetId=document.getElementById('clip-target').value||null;
+    close();
+    try{
+      await invoke('accept_clip', { title, text: p.text||'', url: p.url||'', targetId });
+      await apiLoad(); render();
+      showToast('已收录到 Mini Wiki');
+    }catch(e){ console.error('accept_clip failed', e); showToast('收录失败：'+(e||'未知错误')); }
+  };
+}
+// 注册剪藏事件监听（仅桌面版）
+function registerClipListener(){
+  if(!HAS_TAURI) return;
+  const T=window.__TAURI__;
+  const listen=(T&&T.event&&T.event.listen)||(T&&T.core&&T.core.listen)||(window.__TAURI_INTERNALS__&&window.__TAURI_INTERNALS__.listen);
+  if(listen){
+    listen('clip-incoming', (e)=>{ try{ showClipInbox(e.payload); }catch(err){ console.error('clip panel error', err); } });
+  }
 }
 
 /* ============ Save (debounced) ============ */
@@ -1566,7 +1789,9 @@ async function initDownloadBadge(){
     const sub=document.querySelector('.brand .sub'); if(sub) sub.textContent='桌面版 · 原型演示';
   }
   if(!(await apiLoad())){ seed(); save(); }
+  normalizeOrders(); save();
   applyTheme(); setView('tree'); render(); setupTreeDnD(); setupImportPreview();
+  registerClipListener();
   if(!HAS_TAURI){ showToast('网页版：笔记存于当前浏览器本地存储；换设备或清缓存会丢失，重要资料建议安装桌面版。'); }
   initDownloadBadge();
 })();

@@ -14,7 +14,13 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder};
+
+// 浏览器剪藏：本地 HTTP 接收服务（仅监听 127.0.0.1）
+use axum::extract::State as AxumState;
+use axum::{routing::get, routing::post, Json, Router};
+use serde_json::json;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +30,8 @@ struct NodeFull {
     parent_id: Option<String>,
     tags: Vec<String>,
     content: String,
+    #[serde(default)]
+    order: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -124,6 +132,69 @@ fn depth_of(id: &str, map: &HashMap<String, NodeFull>) -> usize {
 }
 
 /* ---------- 纯逻辑（可单测） ---------- */
+/* ---------- 标签 frontmatter 读写 ---------- */
+// 解析 _content.md 顶部的 YAML frontmatter，返回 (tags, 正文)；无 frontmatter 时 tags 为空、正文为全文
+fn parse_frontmatter(s: &str) -> (Vec<String>, String) {
+    let s = s.trim_start();
+    if s.starts_with("---\n") || s.starts_with("---\r\n") {
+        if let Some(end) = s[4..].find("\n---") {
+            let fm = &s[4..4 + end];
+            let body = s[4 + end + 5..].trim_start_matches('\n').to_string();
+            let mut tags = Vec::new();
+            for line in fm.lines() {
+                let line = line.trim();
+                if let Some(rest) = line.strip_prefix("tags:") {
+                    let rest = rest.trim().trim_start_matches('[').trim_end_matches(']').trim();
+                    if !rest.is_empty() {
+                        for t in rest.split(',') {
+                            let t = t.trim().trim_matches('"').trim_matches('\'').to_string();
+                            if !t.is_empty() {
+                                tags.push(t);
+                            }
+                        }
+                    }
+                }
+            }
+            return (tags, body);
+        }
+    }
+    (Vec::new(), s.to_string())
+}
+
+// 把正文 + tags 序列化为带 YAML frontmatter 头部的 _content.md 内容
+fn serialize_with_tags(body: &str, tags: &[String]) -> String {
+    let mut out = String::from("---\n");
+    out.push_str("tags: [");
+    out.push_str(
+        &tags
+            .iter()
+            .map(|t| format!("\"{}\"", t.replace('"', "\\\"")))
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
+    out.push_str("]\n---\n\n");
+    out.push_str(body.trim_end());
+    out.push('\n');
+    out
+}
+
+// 把正文与 tags 落盘到 _content.md：
+// - 正文优先保留磁盘现有正文（避免覆盖用户手编），仅当与前端传入 content 不同才以前端为准
+// - tags 以传入为准写入 frontmatter 镜像（state.json 仍为主源，frontmatter 供文件可读/可移植）
+fn write_content_with_tags(cp: &PathBuf, incoming_content: &str, tags: &[String]) {
+    let cur = fs::read_to_string(cp).unwrap_or_default();
+    let (_, body) = parse_frontmatter(&cur);
+    let body = if body != incoming_content {
+        incoming_content.to_string()
+    } else {
+        body
+    };
+    let new_content = serialize_with_tags(&body, tags);
+    if cur.trim_end() != new_content.trim_end() {
+        let _ = fs::write(cp, new_content);
+    }
+}
+
 fn load_vault_inner() -> Persisted {
     let _ = fs::create_dir_all(vault_root());
     read_state()
@@ -163,10 +234,7 @@ fn sync_vault_inner(
             let _ = fs::create_dir_all(&desired);
         }
         let cp = desired.join("_content.md");
-        let cur = fs::read_to_string(&cp).unwrap_or_default();
-        if cur != n.content {
-            let _ = fs::write(&cp, &n.content);
-        }
+        write_content_with_tags(&cp, &n.content, &n.tags);
     }
 
     // 2) 软删除已不存在的节点（文件夹移入回收站）
@@ -220,6 +288,17 @@ fn sync_vault_inner(
         }
     }
 
+    // 4) 生成标签索引缓存 .pyrakb/tags.index（tag -> [nodeId]），供计数/筛选/未来搜索复用
+    //    须在 move incoming 之前完成
+    let mut idx: HashMap<String, Vec<String>> = HashMap::new();
+    for (_, n) in &incoming {
+        for t in &n.tags {
+            idx.entry(t.clone()).or_default().push(n.id.clone());
+        }
+    }
+    if let Ok(s) = serde_json::to_string_pretty(&idx) {
+        let _ = fs::write(pyrakb_dir().join("tags.index"), s);
+    }
     // 3) 提交索引
     state.nodes = incoming;
     state.images = images;
@@ -263,23 +342,151 @@ fn export_note(filename: String, contents: String) -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+/* ---------- 浏览器剪藏：接收 HTTP 服务 ---------- */
+// 接收端数据结构（来自浏览器扩展的 POST /clip）
+#[derive(Deserialize)]
+struct ClipIn {
+    title: Option<String>,
+    text: String,
+    url: Option<String>,
+}
+// 向前端 webview 派发的事件载荷
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ClipPayload {
+    title: String,
+    text: String,
+    url: String,
+}
+
+fn first_line(s: &str) -> String {
+    s.lines()
+        .map(|l| l.trim())
+        .find(|l| !l.is_empty())
+        .map(|l| l.to_string())
+        .unwrap_or_else(|| "网页剪藏".to_string())
+}
+fn nanos() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as i64)
+        .unwrap_or(0)
+}
+
+// 剪藏落盘：新建一个节点并写入 state.json + 磁盘文件夹
+#[tauri::command]
+fn accept_clip(
+    title: String,
+    text: String,
+    url: String,
+    target_id: Option<String>,
+) -> Result<NodeFull, String> {
+    let mut state = read_state();
+    if let Some(pid) = &target_id {
+        if !state.nodes.contains_key(pid) {
+            return Err("目标节点不存在".into());
+        }
+    }
+    let id = format!("clip_{}", nanos());
+    let content = if url.trim().is_empty() {
+        format!("# {}\n\n{}\n", title, text)
+    } else {
+        format!("# {}\n\n{}\n\n> 来源：[{}]({})\n", title, text, url, url)
+    };
+    let order = state.nodes.len() as i64 + 1;
+    let node = NodeFull {
+        id: id.clone(),
+        title: title.clone(),
+        parent_id: target_id.clone(),
+        tags: vec!["剪藏".to_string()],
+        content,
+        order,
+    };
+    // 先入索引，便于 path_of 计算完整路径
+    state.nodes.insert(id.clone(), node.clone());
+    if let Some(p) = path_of(&id, &state.nodes) {
+        if let Some(parent) = p.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::create_dir_all(&p);
+        let _ = fs::write(p.join("_content.md"), &node.content);
+    }
+    write_state(&state);
+    Ok(node)
+}
+
+// 健康检查：浏览器扩展用来确认 App 是否在运行
+async fn health_handler() -> Json<serde_json::Value> {
+    Json(json!({ "ok": true }))
+}
+
+// 接收剪藏：派发 clip-incoming 事件给前端，由前端弹收录面板
+async fn clip_handler(
+    AxumState(app): AxumState<tauri::AppHandle>,
+    Json(body): Json<ClipIn>,
+) -> Json<serde_json::Value> {
+    let title = match body.title {
+        Some(t) if !t.trim().is_empty() => t,
+        _ => first_line(&body.text),
+    };
+    let payload = ClipPayload {
+        title,
+        text: body.text,
+        url: body.url.unwrap_or_default(),
+    };
+    let _ = app.emit("clip-incoming", &payload);
+    Json(json!({ "ok": true }))
+}
+
+// 在 127.0.0.1:18735 起本地 HTTP 服务（端口被占用则顺延尝试）
+async fn start_clip_server(app: tauri::AppHandle) {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+    let router = Router::new()
+        .route("/health", get(health_handler))
+        .route("/clip", post(clip_handler))
+        .layer(cors)
+        .with_state(app);
+    for port in 18735..=18740u16 {
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+        match tokio::net::TcpListener::bind(addr).await {
+            Ok(listener) => {
+                eprintln!("[clip-server] listening on {}", addr);
+                if let Err(e) = axum::serve(listener, router).await {
+                    eprintln!("[clip-server] serve error: {}", e);
+                }
+                return;
+            }
+            Err(_) => continue,
+        }
+    }
+    eprintln!("[clip-server] 无法在 18735-18740 任一端口绑定，剪藏功能不可用");
+}
+
 /* ---------- entry ---------- */
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_vault, sync_vault, reveal_vault, export_note])
+        .invoke_handler(tauri::generate_handler![load_vault, sync_vault, reveal_vault, export_note, accept_clip])
         .setup(|app| {
             // 关键：必须用 WebviewUrl::App 让 Tauri 经自身协议加载前端，
             // 否则 file:// 外部页面不会注入 window.__TAURI__，invoke 全部失效。
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("PyraKB 本地知识库")
+                .title("Mini Wiki 本地知识库")
                 .inner_size(1366.0, 900.0)
                 .min_inner_size(960.0, 600.0)
                 .resizable(true)
                 .build()?;
+            // 启动浏览器剪藏本地服务（仅监听 127.0.0.1）
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                start_clip_server(handle).await;
+            });
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running PyraKB application");
+        .expect("error while running Mini Wiki application");
 }
 
 /* ---------- tests ---------- */
@@ -316,6 +523,7 @@ mod tests {
             parent_id: parent.map(|s| s.to_string()),
             tags: vec![],
             content: content.to_string(),
+            order: 0,
         }
     }
 
@@ -364,6 +572,29 @@ mod tests {
         sync_vault_inner(&mut state, &[node("r1", "产品V2", None, "x")], HashMap::new(), "light".into()).unwrap();
         assert!(vault_base().join("产品V2").exists(), "新名文件夹应存在");
         assert!(!vault_base().join("产品").exists(), "旧名文件夹应被移走");
+    }
+
+    #[test]
+    fn clip_creates_node_file_and_state_entry() {
+        let _t = setup();
+        let mut state = Persisted::default();
+        sync_vault_inner(&mut state, &[node("r1", "收件箱", None, "x")], HashMap::new(), "light".into()).unwrap();
+        let new = accept_clip(
+            "测试剪藏".into(),
+            "这是从网页选中的文字。".into(),
+            "https://example.com/page".into(),
+            Some("r1".into()),
+        ).expect("accept_clip 应成功");
+        assert_eq!(new.title, "测试剪藏");
+        assert!(new.tags.contains(&"剪藏".to_string()));
+        let state2 = read_state();
+        assert!(state2.nodes.contains_key(&new.id));
+        let path = path_of(&new.id, &state2.nodes).expect("应能计算路径");
+        assert!(path.exists(), "节点文件夹应存在");
+        let content = fs::read_to_string(path.join("_content.md")).unwrap();
+        assert!(content.contains("这是从网页选中的文字。"));
+        assert!(content.contains("https://example.com/page"));
+        assert!(content.contains("# 测试剪藏"));
     }
 
     #[test]
