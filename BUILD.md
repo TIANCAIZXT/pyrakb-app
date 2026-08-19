@@ -15,7 +15,7 @@
    cd pyrakb-app
    git init -b main
    git add .
-   git commit -m "Mini Wiki v0.1.3"
+   git commit -m "Mini Wiki v0.2.0"
    # 在 github.com 新建空仓库，复制其 URL，然后：
    git remote add origin <你的仓库URL>
    git push -u origin main
@@ -24,7 +24,7 @@
 
 2. **等 CI 跑完**：进 GitHub 仓库 → **Actions** 标签 → 找 `Build Installers` 任务（每个平台几分钟到十几分钟）。绿色对勾即成功。
 
-3. **下载**：点进该次运行 → 底部 **Artifacts** 区域 → 下载 `pyrakb-windows-latest`（里面是 `Mini Wiki_0.1.3_x64_en-US.msi`）。同理 `pyrakb-macos-latest` 是 `.dmg`。
+3. **下载**：点进该次运行 → 底部 **Artifacts** 区域 → 下载 `pyrakb-windows-latest`（里面是 `Mini Wiki_0.2.0_x64_en-US.msi`）。同理 `pyrakb-macos-latest` 是 `.dmg`。
 
 > 想手动触发？仓库 → **Actions → Build Installers → Run workflow** 即可，不必改代码。
 > 想发正式 Release 自动出包？把 `on:` 加一行 `release: { types: [published] }` 并打 tag 即可（可随时找我加）。
@@ -65,10 +65,10 @@ source "$HOME/.cargo/env"     # 让 cargo 进入 PATH
 # 构建并出 .app（bundle_dmg.sh 在 headless 会跳过失败，但 .app 已生成）
 npx tauri build
 # 手动压 dmg（headless 可用）
-hdiutil create -volname "Mini Wiki" -srcfolder "src-tauri/target/release/bundle/macos/Mini Wiki.app" -ov -format UDZO "src-tauri/target/release/bundle/dmg/Mini Wiki_0.1.3.dmg"
+hdiutil create -volname "Mini Wiki" -srcfolder "src-tauri/target/release/bundle/macos/Mini Wiki.app" -ov -format UDZO "src-tauri/target/release/bundle/dmg/Mini Wiki_0.2.0.dmg"
 ```
 
-产物：`src-tauri/target/release/bundle/dmg/Mini Wiki_0.1.3.dmg`（本机为 `_x64`，在 Apple Silicon 上经 Rosetta 2 运行，Intel 原生运行）。
+产物：`src-tauri/target/release/bundle/dmg/Mini Wiki_0.2.0.dmg`（本机为 `_x64`，在 Apple Silicon 上经 Rosetta 2 运行，Intel 原生运行）。
 
 **签名说明**：本机无 Apple Developer 证书，使用 ad-hoc 签名。用户首次打开若被 Gatekeeper 拦截，右键「打开」→「仍要打开」即可。**正式对外分发**需：
 - 购买 Apple Developer（$99/年）获取开发者证书；
@@ -86,7 +86,7 @@ hdiutil create -volname "Mini Wiki" -srcfolder "src-tauri/target/release/bundle/
    npm install
    npm run build
    ```
-7. 产物：`src-tauri\target\release\bundle\msi\Mini Wiki_0.1.3_x64_en-US.msi`
+7. 产物：`src-tauri\target\release\bundle\msi\Mini Wiki_0.2.0_x64_en-US.msi`
 8. （可选）**代码签名**：准备 EV / OV 代码签名证书（如 DigiCert、Sectigo），在 `tauri.conf.json` 的 `bundle.windows` 配置 `certificateThumbprint` 与 `timestampUrl`，避免 SmartScreen 拦截。
 
 > Windows 包**无法在 macOS 上交叉构建**（Tauri 官方限制），必须在 Windows 环境或 CI（GitHub Actions）产出 `.msi`。
