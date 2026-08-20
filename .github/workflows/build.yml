@@ -15,7 +15,12 @@ on:
     tags: ['v*']
   release:
     types: [published]
-  workflow_dispatch: {}        # 允许在 GitHub 网页手动点 "Run workflow" 触发
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '把构建产物上传到哪个已存在的 Release tag（如 v0.2.1）；留空则按触发事件决定'
+        required: false
+        default: ''
 
 permissions:
   contents: write              # release 需要写权限来挂载资产
@@ -55,15 +60,19 @@ jobs:
       # macOS 的 dmg 打包（bundle_dmg.sh / create-dmg）依赖 Finder/AppleScript，
       # 在无界面 CI 上必失败。这里只出 .app，再用 hdiutil 手动压 dmg（headless 可用）。
       # 构建 universal 二进制（x86_64 + arm64），同时兼容 Intel 与 Apple Silicon Mac。
+      # 注意：universal 构建产物位于 target/universal-apple-darwin/... 而非 target/release/...，
+      # 故用 find 定位 .app，避免路径错位导致 hdiutil 找不到源而失败。
       - name: "Build Tauri (macOS: universal app + manual dmg)"
         if: matrix.platform == 'macos-latest'
         run: |
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
           npm run build -- --target universal-apple-darwin --bundles app
+          APP=$(find src-tauri/target -type d -name "Mini Wiki.app" -path "*bundle/macos*" | head -1)
+          if [ -z "$APP" ]; then echo "✗ 找不到构建出的 .app"; exit 1; fi
           mkdir -p src-tauri/target/release/bundle/dmg
           APP_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
           hdiutil create -volname "Mini Wiki" \
-            -srcfolder "src-tauri/target/release/bundle/macos/Mini Wiki.app" \
+            -srcfolder "$APP" \
             -ov -format UDZO "src-tauri/target/release/bundle/dmg/Mini Wiki_${APP_VER}.dmg"
 
       - name: "Build Tauri (Windows: msi)"
@@ -89,7 +98,7 @@ jobs:
   # 单一发布点：收集三平台包 → 创建/更新 Release 并挂载资产 + dist-manifest.json
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' || github.event.inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -104,7 +113,7 @@ jobs:
       - name: Collect packages + generate manifest
         id: collect
         env:
-          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           echo "TAG=$TAG" >> "$GITHUB_ENV"
