@@ -8,7 +8,7 @@
 set -euo pipefail
 
 REPO_NAME="${REPO_NAME:-pyrakb-app}"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.2.1}"
 TAG="v$VERSION"
 TITLE="Mini Wiki v$VERSION"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

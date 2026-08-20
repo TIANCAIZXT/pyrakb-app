@@ -885,7 +885,7 @@ function renderEditor(){
           <button data-mode="preview">预览</button>
         </div>
         <span class="act-sep"></span>
-        <button class="doc-act" id="import-btn" title="导入 Word / PDF / HTML（自动识别结构）">导入</button>
+        <button class="doc-act" id="import-btn" title="导入 Markdown / Word / PDF / HTML（自动识别结构）">导入</button>
         <button class="doc-act" id="copy-btn" title="复制整篇（文字 / 图片 / 格式，可粘贴到 Word、Notion）">复制</button>
         <button class="doc-act" id="folder-btn" title="在文件管理器中打开本地文件夹">文件夹</button>
         <div class="exp-wrap">
@@ -915,7 +915,7 @@ function renderEditor(){
         <button class="fmt" data-fmt="link" title="双向链接">链接</button>
         <button class="fmt" data-fmt="image" title="插入图片">图片</button>
         <input type="file" id="img-input" accept="image/*" multiple style="display:none" />
-        <input type="file" id="import-input" accept=".html,.htm,.docx,.pdf" multiple style="display:none" />
+        <input type="file" id="import-input" accept=".html,.htm,.docx,.pdf,.md,.markdown,.text" multiple style="display:none" />
       </div>
     </div>
     <div class="editor-pane">
@@ -1230,6 +1230,41 @@ function parseHtmlOutline(rawHtml, fileName){
   }
   return { root, idMap };
 }
+// 把 Markdown 解析成「带层级的笔记大纲」：按 # 标题层级建树（跳过 ``` 代码块内的 #），
+// 首行 # 标题自动作为根标题（不再单列节点），与 HTML 导入保持一致的树结构
+function parseMarkdownOutline(text, fileName){
+  const lines = text.split('\n');
+  // 取首个 # 标题作为根标题
+  let rootTitle = fileName || '导入文档';
+  for(const line of lines){ const h=line.match(/^\s*#\s+(.+?)\s*$/); if(h){ rootTitle=h[1].trim(); break; } }
+  const root = { title: rootTitle, level:0, children:[], content:'', anchor:null };
+  const stack = [root];
+  let cur = null, firstHeadingHandled = false, inFence = false, fenceCh = '';
+  const tidy = (n)=>{ n.content = n.content.replace(/\n{3,}/g,'\n\n').trim(); n.children.forEach(tidy); };
+  for(const line of lines){
+    const fence = line.match(/^\s*(```|~~~)/);
+    if(fence){
+      if(!inFence){ inFence=true; fenceCh=fence[1][0]; }
+      else if(line.trim().startsWith(fenceCh)){ inFence=false; }
+    }
+    if(!inFence){
+      const h = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+      if(h){
+        const level = h[1].length, title = h[2].trim();
+        if(!firstHeadingHandled && level===1 && title===rootTitle){ firstHeadingHandled=true; cur=root; continue; } // 首行 H1 折叠为根
+        firstHeadingHandled=true;
+        const sec = { title, level, children:[], content:'', anchor:null };
+        while(stack.length>1 && stack[stack.length-1].level >= level) stack.pop();
+        stack[stack.length-1].children.push(sec); stack.push(sec); cur=sec;
+        continue;
+      }
+    }
+    if(cur) cur.content = (cur.content ? cur.content + '\n' : '') + line;
+    else root.content = (root.content ? root.content + '\n' : '') + line;
+  }
+  tidy(root);
+  return { root, idMap:{} };
+}
 function createNodesFromOutline(sec, parentId, counter){
   // 读取内容/图片/格式 → 落库为干净 Markdown：内联图抽为 asset:// 资源，残留 HTML 标签统一剔除
   let clean = extractInlineImages(sec.content || '');
@@ -1303,6 +1338,7 @@ async function importFiles(files){
       if(ext==='html'||ext==='htm'){ const r=parseHtmlOutline(await readFileAsText(f), baseTitle); await inlineExternalImagesInOutline(r.root); items.push({ root:r.root, name:f.name }); }
       else if(ext==='docx'){ const r=parseHtmlOutline(await mammothToHtml(await f.arrayBuffer()), baseTitle); await inlineExternalImagesInOutline(r.root); items.push({ root:r.root, name:f.name }); }
       else if(ext==='pdf'){ const root=await pdfImport(await f.arrayBuffer(), baseTitle); items.push({ root, name:f.name }); }
+      else if(ext==='md'||ext==='markdown'||ext==='text'){ const r=parseMarkdownOutline(await readFileAsText(f), baseTitle); await inlineExternalImagesInOutline(r.root); items.push({ root:r.root, name:f.name }); }
       else { showToast('不支持的格式：'+f.name); continue; }
     }catch(err){ showToast('导入失败：'+f.name+'（'+(err&&err.message||err)+'）'); }
   }

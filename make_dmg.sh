@@ -6,7 +6,7 @@ set -e
 
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 APP="$PROJ/src-tauri/target/release/bundle/macos/Mini Wiki.app"
-OUT="$PROJ/src-tauri/target/release/bundle/dmg/Mini Wiki_0.2.0_x64.dmg"
+OUT="$PROJ/src-tauri/target/release/bundle/dmg/Mini Wiki_0.2.1_x64.dmg"
 
 if [ ! -d "$APP" ]; then
   echo "找不到 $APP，请先运行: npx tauri build" >&2
